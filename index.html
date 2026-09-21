@@ -1,0 +1,2016 @@
+<title>The Workshop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=JetBrains+Mono:wght@500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+<style>
+:root{
+  --void:#070910;
+  --void-2:#151b2a;
+  --surface:#11151f;
+  --surface-2:#1a2030;
+  --line:#2c3446;
+  --paper:#ece5d8;
+  --muted:#98a2b5;
+  --dim:#6c7689;
+  --amber:#ffb45c;
+  --cyan:#6fd6f2;
+  --mint:#7fe0b8;
+  --blueprint:#5b9bd5;
+
+  --display:"Familjen Grotesk","Helvetica Neue",Arial,sans-serif;
+  --body:"Newsreader",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+
+  --gut:clamp(16px,4vw,34px);
+  color-scheme:dark;
+}
+
+/* Single committed visual world: a dark room. Painted explicitly so it holds
+   on either host ground, per the artifact theme rules. */
+
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--void);
+  color:var(--paper);
+  font-family:var(--body);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;margin:0;padding:0;cursor:pointer}
+a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(111,214,242,.32)}
+a:hover{border-bottom-color:var(--cyan)}
+:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:3px}
+
+/* ---------- stage ---------- */
+#stage{position:fixed;inset:0;overflow:hidden}
+#void{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(120% 90% at 62% 38%, #1b2233 0%, #10141f 42%, #070910 78%, #04050a 100%);
+}
+#grid{
+  position:absolute;inset:0;opacity:.28;
+  background-image:
+    linear-gradient(rgba(111,214,242,.05) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(111,214,242,.05) 1px,transparent 1px);
+  background-size:52px 52px;
+  -webkit-mask-image:radial-gradient(60% 50% at 55% 45%,#000 0%,transparent 72%);
+  mask-image:radial-gradient(60% 50% at 55% 45%,#000 0%,transparent 72%);
+}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#c.dragging{cursor:grabbing}
+#c.over{cursor:pointer}
+#vignette{
+  position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(78% 68% at 50% 46%,transparent 40%,rgba(4,5,10,.62) 100%);
+}
+
+/* ---------- hud ---------- */
+.hud{position:absolute;pointer-events:none;z-index:4}
+.hud > *{pointer-events:auto}
+
+#nameplate{
+  top:calc(env(safe-area-inset-top,0px) + var(--gut));
+  left:var(--gut);
+  max-width:min(46vw,420px);
+}
+#nameplate .eyebrow{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--amber);margin:0 0 9px;
+  display:flex;align-items:center;gap:8px;
+}
+#nameplate .eyebrow::before{
+  content:"";width:18px;height:1px;background:var(--amber);opacity:.7;flex:none;
+}
+#nameplate h1{
+  font-family:var(--display);font-weight:700;font-size:clamp(22px,3.1vw,34px);
+  line-height:1.02;letter-spacing:-.022em;margin:0;text-wrap:balance;
+}
+#nameplate p{
+  font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.04em;
+  color:var(--muted);margin:8px 0 0;line-height:1.45;
+}
+
+#compass{
+  top:calc(env(safe-area-inset-top,0px) + var(--gut));
+  right:var(--gut);
+  display:flex;flex-direction:column;align-items:flex-end;gap:10px;
+}
+.chip-btn{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);
+  padding:8px 13px;border:1px solid var(--line);border-radius:2px;
+  background:rgba(17,21,31,.66);transition:color .18s,border-color .18s,background .18s;
+}
+.chip-btn:hover{color:var(--paper);border-color:#46536d;background:rgba(26,32,48,.82)}
+.chip-btn[hidden]{display:none}
+
+#tray{
+  left:var(--gut);right:var(--gut);
+  bottom:calc(env(safe-area-inset-bottom,0px) + var(--gut));
+  display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;
+}
+#legend{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#legend .lg{
+  font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim);
+  padding:7px 11px;border:1px solid transparent;border-radius:2px;
+  background:rgba(12,15,23,.5);
+  transition:color .18s,border-color .18s,background .18s;
+}
+#legend .lg:hover,#legend .lg.on{color:var(--paper);border-color:var(--line);background:rgba(26,32,48,.78)}
+#legend .lg.on{color:var(--amber);border-color:rgba(255,180,92,.38)}
+
+#hint{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);text-align:right;line-height:1.7;white-space:nowrap;
+}
+#hint b{color:var(--muted);font-weight:500}
+
+/* floating hover label, positioned by JS */
+#tag{
+  position:absolute;z-index:3;pointer-events:none;
+  transform:translate(-50%,-140%);
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;white-space:nowrap;
+  padding:6px 10px;border:1px solid rgba(255,180,92,.34);border-radius:2px;
+  background:rgba(8,10,16,.88);color:var(--paper);
+  opacity:0;transition:opacity .14s;
+}
+#tag.on{opacity:1}
+#tag i{color:var(--amber);font-style:normal;margin-right:7px}
+
+/* ---------- panel ---------- */
+#panel{
+  position:absolute;z-index:6;
+  top:0;right:0;height:100%;
+  width:min(492px,42vw);
+  display:flex;flex-direction:column;
+  background:linear-gradient(200deg,rgba(26,32,48,.93) 0%,rgba(13,16,24,.95) 58%,rgba(9,11,18,.96) 100%);
+  border-left:1px solid var(--line);
+  box-shadow:-30px 0 70px rgba(2,3,7,.6);
+  transform:translateX(102%);
+  transition:transform .46s cubic-bezier(.22,.9,.28,1);
+  will-change:transform;
+}
+#panel.open{transform:translateX(0)}
+#panel::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:1px;
+  background:linear-gradient(180deg,transparent,rgba(255,180,92,.5) 22%,rgba(111,214,242,.3) 62%,transparent);
+}
+#pbar{
+  flex:none;display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:calc(env(safe-area-inset-top,0px) + 20px) 26px 16px;
+  border-bottom:1px solid rgba(44,52,70,.7);
+}
+#pback{
+  display:flex;align-items:center;gap:9px;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);transition:color .18s;
+}
+#pback:hover{color:var(--amber)}
+#pback span{font-size:13px;line-height:1}
+#pidx{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--dim);font-variant-numeric:tabular-nums}
+
+#pbody{
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:28px 26px calc(env(safe-area-inset-bottom,0px) + 40px);
+  scrollbar-width:thin;scrollbar-color:#3a445a transparent;
+}
+#pbody::-webkit-scrollbar{width:9px}
+#pbody::-webkit-scrollbar-thumb{background:#313a4d;border:3px solid transparent;background-clip:content-box;border-radius:9px}
+
+.p-kick{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--amber);margin:0 0 12px;
+}
+.p-title{
+  font-family:var(--display);font-weight:700;font-size:clamp(25px,2.7vw,33px);
+  line-height:1.06;letter-spacing:-.024em;margin:0;text-wrap:balance;
+}
+.p-sub{
+  font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.03em;
+  color:var(--muted);margin:13px 0 0;line-height:1.6;
+}
+.p-status{
+  display:inline-flex;align-items:center;gap:7px;margin:16px 0 0;
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  padding:5px 10px;border-radius:2px;border:1px solid;
+}
+.p-status i{width:5px;height:5px;border-radius:50%;background:currentColor;flex:none}
+.p-status.live{color:var(--amber);border-color:rgba(255,180,92,.34);background:rgba(255,180,92,.07)}
+.p-status.soon{color:var(--blueprint);border-color:rgba(91,155,213,.34);background:rgba(91,155,213,.07)}
+.p-status.idea{color:var(--paper);border-color:rgba(236,229,216,.24);background:rgba(236,229,216,.05)}
+.p-status.ship{color:var(--mint);border-color:rgba(127,224,184,.3);background:rgba(127,224,184,.06)}
+
+.p-rule{height:1px;background:rgba(44,52,70,.8);margin:26px 0 0;border:0}
+
+.p-block{margin:26px 0 0}
+.p-block h3{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--paper);margin:0 0 10px;
+}
+.p-block p{
+  font-family:var(--body);font-size:16px;line-height:1.66;color:#cdd4df;
+  margin:0;max-width:62ch;
+}
+.p-block p + p{margin-top:12px}
+.p-lead p{font-size:17px;color:#dde3ec}
+
+.p-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0}
+.p-list li{
+  display:flex;gap:16px;align-items:baseline;
+  padding:11px 0;border-top:1px solid rgba(44,52,70,.55);
+}
+.p-list li:first-child{border-top:0}
+.p-list .k{
+  flex:none;width:112px;
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--dim);line-height:1.7;
+}
+.p-list .v{
+  font-family:var(--mono);font-size:12px;line-height:1.75;color:#cdd4df;
+}
+
+.p-tags{display:flex;flex-wrap:wrap;gap:6px;margin:20px 0 0}
+.p-tags span{
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);
+  padding:5px 9px;border:1px solid rgba(44,52,70,.9);border-radius:2px;background:rgba(17,21,31,.5);
+}
+
+.p-links{display:flex;flex-direction:column;gap:0;margin:22px 0 0}
+.p-links a{
+  display:flex;align-items:baseline;gap:14px;padding:13px 0;
+  border-top:1px solid rgba(44,52,70,.55);border-bottom:0;
+  color:var(--paper);transition:color .18s;
+}
+.p-links a:first-child{border-top:0}
+.p-links a:hover{color:var(--cyan)}
+.p-links .k{
+  flex:none;width:112px;font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+}
+.p-links .v{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+
+.p-next{
+  display:flex;gap:8px;flex-wrap:wrap;margin:34px 0 0;
+  padding-top:22px;border-top:1px solid rgba(44,52,70,.8);
+}
+.p-next button{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);padding:8px 12px;border:1px solid var(--line);border-radius:2px;
+  transition:color .18s,border-color .18s;
+}
+.p-next button:hover{color:var(--amber);border-color:rgba(255,180,92,.4)}
+
+/* ---------- loader ---------- */
+#boot{
+  position:absolute;inset:0;z-index:9;display:flex;
+  align-items:center;justify-content:center;flex-direction:column;gap:18px;
+  background:var(--void);transition:opacity .6s;
+}
+#boot.gone{opacity:0;pointer-events:none}
+#boot .bt{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--dim);
+}
+#boot .bb{width:132px;height:1px;background:rgba(44,52,70,.9);position:relative;overflow:hidden}
+#boot .bb i{
+  position:absolute;inset:0;width:40%;background:var(--amber);
+  animation:sweep 1.15s cubic-bezier(.5,0,.5,1) infinite;
+}
+@keyframes sweep{0%{transform:translateX(-110%)}100%{transform:translateX(260%)}}
+
+/* ---------- static fallback ---------- */
+#flat{display:none}
+body.flat{overflow:auto}
+body.flat #stage{position:static;display:none}
+body.flat #flat{display:block}
+
+#flat .doc{max-width:74ch;margin:0 auto;padding-block:clamp(44px,8vw,86px);padding-left:var(--gut);padding-right:var(--gut)}
+#flat .eyebrow{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--amber);margin:0 0 14px}
+#flat h1{font-family:var(--display);font-weight:700;font-size:clamp(34px,7vw,58px);line-height:1;letter-spacing:-.03em;margin:0;text-wrap:balance}
+#flat .role{font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--muted);margin:14px 0 0}
+#flat .lede{font-family:var(--body);font-size:19px;line-height:1.6;color:#dde3ec;margin:26px 0 0;max-width:60ch}
+#flat h2{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--amber);margin:64px 0 0;padding-bottom:12px;border-bottom:1px solid var(--line);
+}
+#flat h3{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:-.015em;margin:32px 0 0;line-height:1.16}
+#flat .meta{font-family:var(--mono);font-size:11px;color:var(--muted);margin:8px 0 0;letter-spacing:.03em}
+#flat h4{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--paper);margin:22px 0 8px}
+#flat p{font-family:var(--body);font-size:16px;line-height:1.66;color:#cdd4df;margin:10px 0 0;max-width:62ch}
+#flat .note{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:52px;line-height:1.8}
+#flat dl{margin:14px 0 0;display:flex;flex-direction:column;gap:0}
+#flat dl div{display:flex;gap:16px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(44,52,70,.55);flex-wrap:wrap}
+#flat dt{flex:none;width:112px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+#flat dd{margin:0;font-family:var(--mono);font-size:12px;line-height:1.75;color:#cdd4df;flex:1;min-width:180px}
+
+@media (max-width:860px){
+  #panel{
+    top:auto;bottom:0;right:0;left:0;width:auto;height:auto;
+    max-height:72%;
+    border-left:0;border-top:1px solid var(--line);
+    border-radius:14px 14px 0 0;
+    transform:translateY(102%);
+    box-shadow:0 -24px 60px rgba(2,3,7,.66);
+  }
+  #panel.open{transform:translateY(0)}
+  #panel::before{left:0;right:0;top:0;bottom:auto;width:auto;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(255,180,92,.5) 30%,rgba(111,214,242,.3) 70%,transparent)}
+  #pbar{padding:16px 20px 13px}
+  #pbody{padding:22px 20px calc(env(safe-area-inset-bottom,0px) + 30px)}
+  #nameplate{max-width:min(70vw,340px)}
+  #hint{display:none}
+  #tray{bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:14px;right:14px}
+  #legend{gap:5px}
+  .p-list .k,.p-links .k{width:88px}
+}
+@media (max-width:520px){
+  #legend .lg{padding:6px 9px;font-size:9px;letter-spacing:.08em}
+  #nameplate h1{font-size:20px}
+}
+@media (prefers-reduced-motion:reduce){
+  #panel{transition:none}
+  #boot .bb i{animation:none;width:100%}
+  *{scroll-behavior:auto}
+}
+</style>
+
+<div id="stage">
+  <div id="void"></div>
+  <div id="grid"></div>
+  <canvas id="c"></canvas>
+  <div id="vignette"></div>
+
+  <div id="tag"><i id="tagk"></i><span id="tagv"></span></div>
+
+  <div class="hud" id="nameplate">
+    <p class="eyebrow">The Workshop</p>
+    <h1>Sanzhar Yermek</h1>
+    <p>Full-Stack Engineer &amp; AI Systems Architect<br>Astana, Kazakhstan</p>
+  </div>
+
+  <div class="hud" id="compass">
+    <button class="chip-btn" id="reset" hidden>Reset view</button>
+  </div>
+
+  <div class="hud" id="tray">
+    <div id="legend"></div>
+    <div id="hint"><b>Drag</b> to orbit &nbsp;·&nbsp; <b>Scroll</b> to zoom<br><b>Click</b> anything on the desk</div>
+  </div>
+
+  <aside id="panel" aria-hidden="true" aria-live="polite">
+    <div id="pbar">
+      <button id="pback"><span>&larr;</span> Back to the room</button>
+      <div id="pidx"></div>
+    </div>
+    <div id="pbody"></div>
+  </aside>
+
+  <div id="boot">
+    <div class="bt">Opening the workshop</div>
+    <div class="bb"><i></i></div>
+  </div>
+</div>
+
+<main id="flat"><div class="doc" id="flatdoc"></div></main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   CONTENT — sourced from CONTENT.md, keyed by object id.
+   Geometry code never touches copy; copy never touches geometry.
+   ============================================================ */
+var CONTENT = {
+
+  about: {
+    kicker: 'The notebook',
+    title: 'Sanzhar Yermek',
+    sub: 'Full-Stack Engineer & AI Systems Architect · Astana, Kazakhstan',
+    lead: 'Building sovereign AI infrastructure and production systems at scale, from on-premise LLM clusters serving an entire bank to voice pipelines that understand agents in real time.',
+    blocks: [
+      { p: "I'm a full-stack developer and AI systems architect working at the intersection of large language models, distributed infrastructure, and real-world enterprise constraints. At ForteBank's AI Department, I design and operate the systems that let one of Kazakhstan's largest banks run generative AI entirely on its own infrastructure, with no data ever leaving the perimeter." },
+      { p: 'My work spans the full stack of modern AI engineering: standing up self-hosted model clusters and the gateways that govern them, building OCR and vision pipelines that read contracts a human would take minutes to parse, and architecting voice analytics systems that turn thousands of hours of call-center audio into actionable, per-agent intelligence. I care about systems that are fast in production, not just fast in a demo: sub-second latency under real load, horizontal scaling that holds up at 3am, and architecture that survives contact with actual users.' },
+      { p: 'Outside of work, I prototype and ship independent projects, from civic-tech platforms to conversational banking assistants, usually going from architecture diagram to working system in days, not sprints.' }
+    ],
+    next: ['exp_ai', 'skills', 'contact']
+  },
+
+  exp_ai: {
+    kicker: 'Centre screen · Experience',
+    title: 'ForteBank, AI Department',
+    sub: 'Full-Stack Software Developer · April 2025 to Present',
+    status: ['ship', 'Current role'],
+    blocks: [
+      { h: 'Sovereign AI Infrastructure', p: 'Designed and operate a self-hosted LLM cluster (GPT-OSS-120B, Qwen family) delivering enterprise-grade generative AI with zero data egress, where every token stays on-premise. Built LiteLLM into a unified governance layer that routes, logs, and audits every model call across the organization, currently powering 160 active subscriptions across 15 departments. This is the backbone that lets legal, compliance, and customer-facing teams use frontier-grade AI without ever touching a third-party API.' },
+      { h: 'Intelligent Document Intelligence Platform', p: 'Architected a production OCR/VLM microservice fusing multiple local vision models (GLM, DeepSeek-OCR, HunyuanVision) with advanced image preprocessing to extract structured data from contracts, including handwriting, stamps, and signatures, entirely offline. Deployed on Kubernetes with autoscaling from 3 to 20 replicas under Prometheus-driven load management, holding document processing latency in the 100 to 500ms range even under bursty enterprise traffic.' },
+      { h: 'Contact-Centre Voice Intelligence', p: 'Built an end-to-end voice analytics pipeline that transcribes live agent calls, runs NLP-based quality scoring, and surfaces per-agent KPI dashboards in near real time, giving management a live pulse on communication quality across the entire contact centre and replacing manual spot-checks with continuous, automated coverage.' },
+      { h: '24/7 Omnichannel Virtual Assistant', p: 'Designed and shipped a multi-channel banking chatbot spanning the mobile app, WhatsApp, and Telegram, absorbing 40 to 50% of contact-centre call volume during peak hours. Effectively a full extra shift of capacity without adding headcount.' }
+    ],
+    facts: [
+      ['Scale', '160 subscriptions · 15 departments'],
+      ['Latency', '100 to 500ms document processing'],
+      ['Autoscale', '3 to 20 Kubernetes replicas'],
+      ['Deflection', '40 to 50% of peak call volume']
+    ],
+    tags: ['GPT-OSS-120B', 'Qwen', 'LiteLLM', 'Kubernetes', 'Prometheus', 'DeepSeek-OCR', 'HunyuanVision', 'ASR/NLP'],
+    next: ['exp_data', 'proj_bank', 'skills']
+  },
+
+  exp_data: {
+    kicker: 'Left screen · Experience',
+    title: 'ForteBank, Data Department',
+    sub: 'Full-Stack Software Developer · Feb 2023 to April 2025',
+    blocks: [
+      { p: 'Engineered an internal data platform that eliminated $40K+ per month in redundant costs, and built the GitLab CI/CD backbone enabling zero-downtime deploys across all production services. Orchestrated complex Airflow DAGs automating large-scale data processing across business units, and scaled an internal analytics portal to 9 departments and 120+ daily users, cutting time-to-insight from days to minutes.' }
+    ],
+    facts: [
+      ['Saved', '$40K+ per month in redundant cost'],
+      ['Deploys', 'Zero-downtime across all prod services'],
+      ['Reach', '9 departments · 120+ daily users']
+    ],
+    tags: ['Airflow', 'GitLab CI/CD', 'Greenplum', 'NiFi', 'PostgreSQL', 'Oracle'],
+    next: ['exp_ai', 'exp_snoonu']
+  },
+
+  exp_snoonu: {
+    kicker: 'The laptop · Experience',
+    title: 'Snoonu',
+    sub: 'Back-end Intern · Qatar (Remote) · Sep to Dec 2021',
+    blocks: [
+      { p: 'Shipped backend features for a high-scale food delivery platform in .NET C#, working across distributed teams in Qatar, the US, and UAE to keep order-management APIs and delivery contracts in sync across time zones.' }
+    ],
+    tags: ['.NET', 'C#', 'REST APIs', 'Distributed teams'],
+    next: ['exp_data', 'education']
+  },
+
+  proj_konsul: {
+    kicker: 'Shelf · Independent project',
+    title: 'Konsul.kz',
+    sub: 'Visa Application Intelligence Platform',
+    status: ['live', 'In progress'],
+    blocks: [
+      { p: 'A civic-tech platform helping Kazakhstani citizens navigate visa applications with a deterministic success-probability scoring engine and LLM-powered guidance for complex cases. Architected as a Next.js 14 / FastAPI / PostgreSQL monorepo with KZ-native payment rails (Kaspi Pay, Epay) and a cloud-native deployment target on ECS Fargate and Amplify, built to go from prototype to production-grade fintech-adjacent infrastructure without a rewrite.' }
+    ],
+    tags: ['Next.js 14', 'FastAPI', 'PostgreSQL', 'Kaspi Pay', 'Epay', 'ECS Fargate', 'Amplify'],
+    next: ['proj_voice', 'proj_bank']
+  },
+
+  proj_voice: {
+    kicker: 'Shelf · Independent project',
+    title: 'Voice Assistant Configuration Portal',
+    sub: 'Multi-tenant SaaS for inbound-call assistants',
+    status: ['live', 'In progress'],
+    blocks: [
+      { p: 'A multi-tenant SaaS platform letting businesses configure and deploy their own inbound-call voice assistants without touching code, built on a Twilio telephony bridge and designed from day one for multi-organization isolation and self-service configuration.' }
+    ],
+    tags: ['Twilio', 'Multi-tenancy', 'Telephony', 'Self-service config'],
+    next: ['proj_speech', 'proj_konsul']
+  },
+
+  proj_bank: {
+    kicker: 'Shelf · Independent project',
+    title: 'Conversational Banking Assistant',
+    sub: 'Telegram assistant with a hard confirmation gate',
+    status: ['ship', 'Built'],
+    blocks: [
+      { p: 'A Telegram-based banking assistant combining LLM-driven intent classification with a Redis-backed confirmation gate before executing real financial actions through a core banking API. Full architecture diagrams, safety rails, and documentation included, designed so a misclassified intent can never move money.' }
+    ],
+    tags: ['Telegram Bot API', 'Redis', 'Intent classification', 'Core banking API'],
+    next: ['proj_konsul', 'exp_ai']
+  },
+
+  proj_tanba: {
+    kicker: 'Shelf · Independent project',
+    title: 'Tanba',
+    sub: 'Privacy-First Smart Link Platform',
+    status: ['soon', 'Coming soon'],
+    blocks: [
+      { p: 'A cloud-native URL shortening and QR redirection platform planned on FastAPI, PostgreSQL, and Redis, with analytics designed around privacy-first principles: insight without surveillance. Full architecture, implementation, and design specs are complete; build is next.' }
+    ],
+    tags: ['FastAPI', 'PostgreSQL', 'Redis', 'QR redirection', 'Privacy-first analytics'],
+    next: ['proj_segue', 'proj_terra']
+  },
+
+  proj_speech: {
+    kicker: 'Shelf · Independent project',
+    title: 'Speech & Language Infrastructure for Central Asia',
+    sub: 'Shared STT/TTS API patterns, Kazakh-first',
+    status: ['live', 'In progress'],
+    blocks: [
+      { p: 'Designing shared API patterns for STT/TTS using the sans-IO principle, so the same logic runs cleanly across sync and async contexts. Currently evaluating local ASR engines (faster-whisper, NVIDIA Canary, Vosk) with a specific focus on Kazakh-language support, aiming to make high-quality speech AI a first-class citizen for Central Asian languages rather than an afterthought.' }
+    ],
+    tags: ['sans-IO', 'faster-whisper', 'NVIDIA Canary', 'Vosk', 'Kazakh ASR'],
+    next: ['proj_voice', 'skills']
+  },
+
+  proj_segue: {
+    kicker: 'Corkboard · Concept',
+    title: 'Segue',
+    sub: 'Browser-Native Auto-DJ',
+    status: ['idea', 'Concept'],
+    blocks: [
+      { p: 'An experimental auto-mixing DJ engine designed to run entirely in-browser on the Web Audio API, with automatic beatmatching and transitions and zero backend audio processing. Currently a research spike into how far client-side signal processing can go before you need a server at all, with DRM constraints under active investigation.' }
+    ],
+    tags: ['Web Audio API', 'Beatmatching', 'Client-side DSP'],
+    next: ['proj_terra', 'proj_tanba']
+  },
+
+  proj_terra: {
+    kicker: 'Corkboard · Concept',
+    title: 'Terra Claims',
+    sub: 'Symbolic Land Trading Platform',
+    status: ['idea', 'Concept'],
+    blocks: [
+      { p: 'A speculative platform for collectible, symbolic territorial claims over real-world latitude and longitude coordinates: part game, part digital-collectibles market. Scoped around an off-chain Postgres/PostGIS foundation as the leanest path to a working MVP.' }
+    ],
+    tags: ['PostGIS', 'PostgreSQL', 'Geospatial', 'Off-chain'],
+    next: ['proj_segue', 'proj_konsul']
+  },
+
+  skills: {
+    kicker: 'Tool wall',
+    title: 'Technical Skills',
+    sub: 'What hangs on the pegboard, grouped by the work it does',
+    groups: [
+      { id: 'lang', h: 'Languages', v: 'Go · Python · SQL · Bash' },
+      { id: 'infra', h: 'Backend & Infra', v: 'FastAPI · Django · React · Docker · Kubernetes · GitLab CI/CD · AWS (S3, Kiro) · Nginx · Linux' },
+      { id: 'data', h: 'Data Engineering', v: 'Airflow · NiFi · Greenplum · PostgreSQL · Oracle' },
+      { id: 'ai', h: 'AI/ML Systems', v: 'On-premise LLM deployment · LiteLLM gateway architecture · OCR/VLM pipelines · ASR/Speech analytics · Model serving at scale' }
+    ],
+    next: ['exp_ai', 'proj_speech']
+  },
+
+  education: {
+    kicker: 'Framed on the wall',
+    title: 'Astana IT University',
+    sub: 'B.S. Computer Science · 2020 to 2023 · Nur-Sultan, Kazakhstan',
+    blocks: [
+      { p: 'Computer Science degree completed alongside the first two years of professional backend work, which is why the Snoonu internship and the ForteBank data role overlap the coursework rather than follow it.' }
+    ],
+    next: ['exp_snoonu', 'contact']
+  },
+
+  contact: {
+    kicker: 'The mail tray',
+    title: 'Get in touch',
+    sub: 'Astana, Kazakhstan · UTC+5',
+    links: [
+      ['Email', 'sanzharyermek@gmail.com', 'mailto:sanzharyermek@gmail.com'],
+      ['GitHub', 'github.com/nunmer', 'https://github.com/nunmer'],
+      ['LinkedIn', 'linkedin.com/in/sanzharyermek', 'https://linkedin.com/in/sanzharyermek/']
+    ],
+    next: ['about', 'exp_ai']
+  }
+};
+
+/* Order drives the "N / 16" counter and the static fallback document. */
+var ORDER = ['about','exp_ai','exp_data','exp_snoonu','proj_konsul','proj_voice','proj_bank',
+             'proj_tanba','proj_speech','proj_segue','proj_terra','skills','education','contact'];
+
+/* Bottom-left legend: the six rooms-within-the-room. */
+var LEGEND = [
+  ['about','About'], ['exp_ai','Experience'], ['proj_konsul','Projects'],
+  ['skills','Skills'], ['education','Education'], ['contact','Contact']
+];
+</script>
+
+<script>
+/* ============================================================
+   BAKED LIGHTING
+   The whole room is lit once, at init, into per-vertex colours.
+   Nothing is a THREE.Light: every mesh renders with MeshBasicMaterial,
+   so the fragment shader does no lighting maths at all. A five-light
+   rig costs exactly the same per frame as no lights. This is what
+   lets an Intel GMA push the scene at full frame rate.
+   ============================================================ */
+
+var LIGHTS = [
+  /* the desk lamp: the dominant warm key */
+  { p:[1.95, 2.72, -3.40], c:[1.00, 0.63, 0.30], i:5.4, a:0.50, b:0.44 },
+  /* monitor spill: cool bounce off the screens onto desk and walls */
+  { p:[0.00, 2.58, -3.70], c:[0.30, 0.71, 0.96], i:2.3, a:0.46, b:0.40 },
+  /* LED strip under the project shelf */
+  { p:[-0.60, 3.40, -4.00], c:[1.00, 0.85, 0.66], i:1.5, a:0.70, b:0.85 },
+  /* clip lamp on the pegboard, keeps the left wall readable */
+  { p:[-4.05, 4.05, -2.70], c:[0.78, 0.86, 1.00], i:2.0, a:0.55, b:0.60 },
+  /* dim warm bounce off the floor at the open front of the diorama */
+  { p:[1.20, 0.45, 1.60], c:[0.62, 0.48, 0.36], i:1.1, a:0.40, b:0.22 }
+];
+
+var SKY = [0.150, 0.190, 0.285];   // cool ambient from above
+var GND = [0.135, 0.095, 0.065];   // warm bounce from the floor
+var RIM = { d:[0.58, 0.30, 0.76], c:[0.40, 0.48, 0.70], i:0.30 };
+
+function nrm3(v){ var l = Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]) || 1; return [v[0]/l, v[1]/l, v[2]/l]; }
+RIM.d = nrm3(RIM.d);
+
+function hash3(x, y, z){
+  var h = Math.sin(x*127.1 + y*311.7 + z*74.77) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+/* Ambient occlusion by proximity to the two walls and the floor. Cheap,
+   entirely fake, and the single biggest contributor to the room reading
+   as a solid space rather than floating boxes. */
+function occlude(x, y, z){
+  var oz = Math.exp(-(z + 4.50) * 1.75);
+  var ox = Math.exp(-(x + 4.50) * 1.75);
+  var oy = Math.exp(-Math.max(0, y) * 2.30);
+  var ao = (1 - 0.36*Math.min(1, oz)) * (1 - 0.32*Math.min(1, ox)) * (1 - 0.46*Math.min(1, oy));
+  return ao < 0.30 ? 0.30 : ao;
+}
+
+var _sh = [0, 0, 0];
+function shade(px, py, pz, nx, ny, nz, base, glow, aoMul){
+  var h = 0.5 + 0.5 * ny;
+  var ao = occlude(px, py, pz) * (aoMul === undefined ? 1 : aoMul);
+  var dirAo = 0.55 + 0.45 * ao;
+
+  var ar = (SKY[0]*h + GND[0]*(1-h)) * ao;
+  var ag = (SKY[1]*h + GND[1]*(1-h)) * ao;
+  var ab = (SKY[2]*h + GND[2]*(1-h)) * ao;
+
+  var rim = Math.max(0, nx*RIM.d[0] + ny*RIM.d[1] + nz*RIM.d[2]) * RIM.i * ao;
+  ar += RIM.c[0]*rim; ag += RIM.c[1]*rim; ab += RIM.c[2]*rim;
+
+  for (var i = 0; i < LIGHTS.length; i++){
+    var L = LIGHTS[i];
+    var dx = L.p[0]-px, dy = L.p[1]-py, dz = L.p[2]-pz;
+    var d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    if (d < 0.0001) d = 0.0001;
+    var ndl = (nx*dx + ny*dy + nz*dz) / d;
+    if (ndl <= 0) continue;
+    var k = ndl * (L.i / (1 + L.a*d + L.b*d*d)) * dirAo;
+    ar += L.c[0]*k; ag += L.c[1]*k; ab += L.c[2]*k;
+  }
+
+  var n = (hash3(px, py, pz) - 0.5) * 0.07 + 1;
+  var r = base[0]*ar*n, g = base[1]*ag*n, b = base[2]*ab*n;
+
+  if (glow){ r += glow[0]; g += glow[1]; b += glow[2]; }
+
+  _sh[0] = r > 1 ? 1 : r;
+  _sh[1] = g > 1 ? 1 : g;
+  _sh[2] = b > 1 ? 1 : b;
+  return _sh;
+}
+
+function hex2rgb(h){
+  return [ ((h>>16)&255)/255, ((h>>8)&255)/255, (h&255)/255 ];
+}
+
+/* ------------------------------------------------------------
+   BUILDER
+   Accumulates transformed, pre-shaded triangles into flat arrays.
+   Normals are consumed during the bake and then thrown away: with
+   MeshBasicMaterial nothing downstream needs them, so each vertex
+   ships 6 floats instead of 9.
+   ------------------------------------------------------------ */
+
+var _geoCache = {};
+function gBox(w, h, d){
+  var k = 'b' + w + '_' + h + '_' + d;
+  if (!_geoCache[k]) _geoCache[k] = new THREE.BoxGeometry(w, h, d);
+  return _geoCache[k];
+}
+function gCyl(rt, rb, h, seg, open){
+  var k = 'c' + rt + '_' + rb + '_' + h + '_' + seg + '_' + (open ? 1 : 0);
+  if (!_geoCache[k]) _geoCache[k] = new THREE.CylinderGeometry(rt, rb, h, seg || 10, 1, !!open);
+  return _geoCache[k];
+}
+function gSphere(r, seg){
+  var k = 's' + r + '_' + seg;
+  if (!_geoCache[k]) _geoCache[k] = new THREE.SphereGeometry(r, seg || 8, (seg || 8) >> 1);
+  return _geoCache[k];
+}
+function gPlane(w, h){
+  var k = 'p' + w + '_' + h;
+  if (!_geoCache[k]) _geoCache[k] = new THREE.PlaneGeometry(w, h);
+  return _geoCache[k];
+}
+
+var _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(),
+    _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
+
+function xf(x, y, z, rx, ry, rz){
+  _e.set(rx||0, ry||0, rz||0, 'YXZ');
+  _q.setFromEuler(_e);
+  _p.set(x, y, z);
+  return new THREE.Matrix4().compose(_p, _q, _s);
+}
+
+function Builder(){ this.pos = []; this.col = []; }
+
+Builder.prototype.push = function(geo, mat, colorHex, opt){
+  opt = opt || {};
+  var g = geo.index ? geo.toNonIndexed() : geo.clone();
+  g.applyMatrix4(mat);
+  var P = g.attributes.position.array, N = g.attributes.normal.array;
+  var base = typeof colorHex === 'number' ? hex2rgb(colorHex) : colorHex;
+  var glow = opt.glow ? (typeof opt.glow === 'number' ? hex2rgb(opt.glow) : opt.glow) : null;
+  if (glow && opt.glowI !== undefined){
+    glow = [glow[0]*opt.glowI, glow[1]*opt.glowI, glow[2]*opt.glowI];
+  }
+  var ao = opt.ao;
+  for (var i = 0; i < P.length; i += 3){
+    var c = shade(P[i], P[i+1], P[i+2], N[i], N[i+1], N[i+2], base, glow, ao);
+    this.pos.push(P[i], P[i+1], P[i+2]);
+    this.col.push(c[0], c[1], c[2]);
+  }
+  g.dispose();
+  return this;
+};
+
+/* box(w,h,d, x,y,z, colour, [rotY | [rx,ry,rz]], opt) */
+Builder.prototype.box = function(w, h, d, x, y, z, col, rot, opt){
+  var r = typeof rot === 'number' ? [0, rot, 0] : (rot || [0,0,0]);
+  return this.push(gBox(w, h, d), xf(x, y, z, r[0], r[1], r[2]), col, opt);
+};
+Builder.prototype.cyl = function(rt, rb, h, seg, x, y, z, col, rot, opt){
+  var r = typeof rot === 'number' ? [0, rot, 0] : (rot || [0,0,0]);
+  return this.push(gCyl(rt, rb, h, seg), xf(x, y, z, r[0], r[1], r[2]), col, opt);
+};
+Builder.prototype.ball = function(rad, seg, x, y, z, col, opt){
+  return this.push(gSphere(rad, seg), xf(x, y, z), col, opt);
+};
+
+Builder.prototype.build = function(){
+  var g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+  g.computeBoundingSphere();
+  g.computeBoundingBox();
+  return g;
+};
+
+/* One shared material for every baked mesh. material.color multiplies the
+   vertex colours, which is how hover highlighting happens for free: bump
+   the mesh's own colour above white and the object lights up, no second
+   material, no outline pass, no shader swap. */
+function bakedMat(){
+  return new THREE.MeshBasicMaterial({ vertexColors: true });
+}
+
+/* ============================================================
+   PROCEDURAL TEXTURES
+   Everything is drawn into small canvases at init. No image
+   requests, no atlas, nothing over 256px, mipmaps off.
+   ============================================================ */
+
+function cv(w, h){
+  var c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+function tex(canvas, opt){
+  var t = new THREE.CanvasTexture(canvas);
+  t.minFilter = THREE.LinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  if (opt && opt.flipY === false) t.flipY = false;
+  return t;
+}
+
+/* soft radial dot, reused for dust motes, bulb bloom and contact shadows */
+function radialTex(inner, outer, size){
+  var c = cv(size || 64, size || 64), x = c.getContext('2d'), r = c.width / 2;
+  var g = x.createRadialGradient(r, r, 0, r, r, r);
+  g.addColorStop(0, inner);
+  g.addColorStop(0.45, outer);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, c.width, c.height);
+  return tex(c);
+}
+
+/* the lamp's light shaft: bright at the shade, gone by the desk */
+function shaftTex(){
+  var c = cv(8, 64), x = c.getContext('2d');
+  var g = x.createLinearGradient(0, 64, 0, 0);
+  g.addColorStop(0.00, 'rgba(255,178,96,0)');
+  g.addColorStop(0.55, 'rgba(255,186,110,0.10)');
+  g.addColorStop(1.00, 'rgba(255,206,150,0.34)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 8, 64);
+  return tex(c);
+}
+
+function screenBase(x, w, h, bg){
+  x.fillStyle = bg; x.fillRect(0, 0, w, h);
+}
+
+/* centre monitor: the LLM cluster dashboard */
+function texCluster(){
+  var c = cv(256, 144), x = c.getContext('2d');
+  screenBase(x, 256, 144, '#0a1620');
+  x.fillStyle = 'rgba(111,214,242,0.10)'; x.fillRect(0, 0, 256, 17);
+  x.fillStyle = '#6fd6f2'; x.font = 'bold 9px monospace';
+  x.fillText('LITELLM  /  GATEWAY', 8, 12);
+  x.fillStyle = '#ffb45c'; x.fillText('160', 214, 12);
+  var bars = [0.82, 0.61, 0.93, 0.44, 0.71, 0.88, 0.35, 0.66];
+  for (var i = 0; i < bars.length; i++){
+    var bh = Math.round(62 * bars[i]);
+    x.fillStyle = 'rgba(111,214,242,0.16)';
+    x.fillRect(10 + i*22, 28, 15, 62);
+    x.fillStyle = bars[i] > 0.8 ? '#ffb45c' : '#6fd6f2';
+    x.fillRect(10 + i*22, 28 + (62 - bh), 15, bh);
+  }
+  x.strokeStyle = 'rgba(127,224,184,0.75)'; x.lineWidth = 1.4;
+  x.beginPath();
+  for (var j = 0; j <= 30; j++){
+    var px = 10 + j * 7.9;
+    var py = 126 - 22 * (0.45 + 0.34*Math.sin(j*0.55) + 0.18*Math.sin(j*1.9));
+    j ? x.lineTo(px, py) : x.moveTo(px, py);
+  }
+  x.stroke();
+  x.fillStyle = 'rgba(236,229,216,0.4)'; x.font = '7px monospace';
+  x.fillText('p99  412ms', 10, 138);
+  x.fillText('egress  0', 200, 138);
+  return tex(c);
+}
+
+/* left monitor: the Airflow DAG */
+function texDag(){
+  var c = cv(256, 144), x = c.getContext('2d');
+  screenBase(x, 256, 144, '#0d1119');
+  var nodes = [[30,72],[84,40],[84,104],[140,72],[196,40],[196,104],[238,72]];
+  var edges = [[0,1],[0,2],[1,3],[2,3],[3,4],[3,5],[4,6],[5,6]];
+  x.strokeStyle = 'rgba(111,214,242,0.42)'; x.lineWidth = 1;
+  for (var e = 0; e < edges.length; e++){
+    var a = nodes[edges[e][0]], b = nodes[edges[e][1]];
+    x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke();
+  }
+  for (var n = 0; n < nodes.length; n++){
+    var done = n < 5;
+    x.fillStyle = done ? '#7fe0b8' : 'rgba(236,229,216,0.22)';
+    x.fillRect(nodes[n][0]-9, nodes[n][1]-6, 18, 12);
+  }
+  x.fillStyle = 'rgba(236,229,216,0.45)'; x.font = '8px monospace';
+  x.fillText('dag: fct_daily_load', 10, 18);
+  x.fillStyle = '#7fe0b8'; x.fillText('5/7', 224, 18);
+  return tex(c);
+}
+
+/* the laptop: order-management service code */
+function texCode(){
+  var c = cv(256, 144), x = c.getContext('2d');
+  screenBase(x, 256, 144, '#0b0f16');
+  x.fillStyle = 'rgba(236,229,216,0.07)'; x.fillRect(0, 0, 20, 144);
+  var widths = [54,120,88,146,72,0,104,132,60,116,92,0,138,74];
+  var cols = ['#6fd6f2','#ece5d8','#ece5d8','#ffb45c','#ece5d8','#000',
+              '#6fd6f2','#ece5d8','#7fe0b8','#ece5d8','#ece5d8','#000','#ffb45c','#ece5d8'];
+  for (var i = 0; i < widths.length; i++){
+    if (!widths[i]) continue;
+    x.globalAlpha = 0.34 + 0.4*((i % 3) / 3);
+    x.fillStyle = cols[i];
+    x.fillRect(26 + (i % 4) * 7, 10 + i*9.6, widths[i], 3.6);
+  }
+  x.globalAlpha = 1;
+  return tex(c);
+}
+
+/* pinned concept sketches for the corkboard */
+function texSketch(kind){
+  var c = cv(128, 160), x = c.getContext('2d');
+  x.fillStyle = '#e6dcc6'; x.fillRect(0, 0, 128, 160);
+  x.lineWidth = 1;
+  x.fillStyle = '#2a2318'; x.font = 'bold 11px monospace';
+  x.fillText(kind === 'wave' ? 'SEGUE' : 'TERRA', 11, 20);
+  x.strokeStyle = 'rgba(42,35,24,0.7)'; x.lineWidth = 1.3;
+  if (kind === 'wave'){
+    x.beginPath();
+    for (var i = 0; i <= 108; i++){
+      var px = 10 + i, amp = 26 * Math.exp(-Math.pow((i-54)/46, 2));
+      var py = 62 + amp * Math.sin(i * 0.62) * (0.5 + 0.5*Math.sin(i*0.09));
+      i ? x.lineTo(px, py) : x.moveTo(px, py);
+    }
+    x.stroke();
+    x.strokeStyle = 'rgba(42,35,24,0.35)';
+    x.beginPath(); x.moveTo(60, 34); x.lineTo(60, 92); x.stroke();
+    x.font = '8px monospace'; x.fillStyle = 'rgba(42,35,24,0.72)';
+    x.fillText('beatmatch @ bar 32', 11, 108);
+    x.fillText('web audio api', 11, 122);
+    x.fillText('no server', 11, 136);
+  } else {
+    x.strokeStyle = 'rgba(42,35,24,0.28)';
+    for (var g = 0; g <= 6; g++){
+      x.beginPath(); x.moveTo(11 + g*17, 32); x.lineTo(11 + g*17, 100); x.stroke();
+      x.beginPath(); x.moveTo(11, 32 + g*11.3); x.lineTo(113, 32 + g*11.3); x.stroke();
+    }
+    x.fillStyle = 'rgba(42,35,24,0.5)';
+    x.fillRect(45, 54, 17, 23); x.fillRect(79, 77, 17, 11);
+    x.strokeStyle = 'rgba(42,35,24,0.8)'; x.lineWidth = 1.2;
+    x.beginPath(); x.arc(53, 65, 4, 0, 6.3); x.stroke();
+    x.font = '8px monospace'; x.fillStyle = 'rgba(42,35,24,0.72)';
+    x.fillText('51.1694 N', 11, 116);
+    x.fillText('71.4491 E', 11, 130);
+    x.fillText('postgis, off-chain', 11, 144);
+  }
+  return tex(c);
+}
+
+/* the open notebook's left page */
+function texPage(){
+  var c = cv(128, 128), x = c.getContext('2d');
+  x.fillStyle = '#ded4bd'; x.fillRect(0, 0, 128, 128);
+  x.strokeStyle = 'rgba(40,34,26,0.18)';
+  for (var i = 0; i < 11; i++){
+    x.beginPath(); x.moveTo(12, 22 + i*9); x.lineTo(116, 22 + i*9); x.stroke();
+  }
+  x.fillStyle = 'rgba(42,35,24,0.62)';
+  for (var j = 0; j < 11; j++){
+    var w = [78, 92, 58, 86, 40, 96, 70, 88, 52, 80, 34][j];
+    x.fillRect(12, 18 + j*9, w, 2.4);
+  }
+  x.fillStyle = '#b4612f'; x.fillRect(12, 8, 26, 4);
+  return tex(c);
+}
+
+/* framed diploma */
+function texDiploma(){
+  var c = cv(128, 96), x = c.getContext('2d');
+  x.fillStyle = '#ded4bd'; x.fillRect(0, 0, 128, 96);
+  x.strokeStyle = 'rgba(42,35,24,0.4)'; x.lineWidth = 1;
+  x.strokeRect(7, 7, 114, 82);
+  x.fillStyle = 'rgba(42,35,24,0.72)';
+  x.fillRect(30, 22, 68, 3); x.fillRect(22, 34, 84, 2);
+  x.fillRect(40, 44, 48, 2); x.fillRect(34, 54, 60, 2);
+  x.fillStyle = '#b4612f'; x.beginPath(); x.arc(30, 72, 8, 0, 6.3); x.fill();
+  x.fillStyle = 'rgba(42,35,24,0.5)'; x.fillRect(48, 70, 50, 2);
+  return tex(c);
+}
+
+/* ============================================================
+   THE ROOM
+   Every static surface goes into one Builder and leaves as a
+   single mesh: one draw call for the floor, both walls, the desk,
+   the chair, the lamp, the shelf, the pegboard and all the clutter.
+   ============================================================ */
+
+var C = {
+  floor:0x3a2e24, rug:0x463a4e,
+  wall:0x2b303c, wallL:0x262b36, batten:0x343b4c, skirt:0x4a3f33,
+  desk:0x7a5537, deskDark:0x5e4128, drawer:0x4f3a29, drawerF:0x6b4e35,
+  metal:0x545b6b, dark:0x2e3340, case:0x232833,
+  shelf:0x6e4d33, peg:0x5d4632, pegHole:0x1c1610,
+  cork:0x8a6a42, corkFrame:0x4a3a28,
+  pot:0x8a5a44, soil:0x241a12, leaf:0x3f6b4a,
+  mug:0xd8d2c6, coffee:0x2a1a10, cable:0x1a1d24,
+  bookA:0x7a3f3a, bookB:0x3a5a7a, bookC:0xa8905c
+};
+
+var GLOW = {
+  amber:[1.00,0.66,0.32], warm:[1.00,0.84,0.62],
+  cyan:[0.36,0.78,0.98], mint:[0.44,0.92,0.74], red:[0.95,0.34,0.30]
+};
+
+function buildRoom(){
+  var b = new Builder(), i, a;
+
+  /* ---- shell ---- */
+  b.box(10, 0.50, 10, 0, -0.25, 0, C.floor);
+  b.box(4.8, 0.02, 2.9, -0.30, 0.012, -1.45, C.rug);
+  b.box(10, 5.2, 0.30, 0, 2.60, -4.65, C.wall);
+  b.box(0.30, 5.2, 10, -4.65, 2.60, 0, C.wallL);
+  b.box(10, 0.24, 0.07, 0, 0.12, -4.46, C.skirt);
+  b.box(0.07, 0.24, 10, -4.46, 0.12, 0, C.skirt);
+
+  /* vertical battens give both walls a readable surface grain */
+  for (i = 0; i < 8; i++){
+    b.box(0.07, 5.2, 0.05, -4.2 + i*1.2, 2.60, -4.47, C.batten);
+    b.box(0.05, 5.2, 0.07, -4.47, 2.60, -4.2 + i*1.2, C.batten);
+  }
+
+  /* ---- desk ---- */
+  b.box(5.8, 0.12, 1.80, 0, 1.48, -3.50, C.desk);
+  b.box(5.8, 0.06, 0.06, 0, 1.39, -2.62, C.deskDark);
+  b.box(0.12, 1.42, 1.70, -2.85, 0.71, -3.50, C.deskDark);
+  b.box(0.12, 1.42, 1.70,  2.85, 0.71, -3.50, C.deskDark);
+  b.box(5.60, 0.10, 0.10, 0, 0.42, -4.15, C.deskDark);
+
+  /* drawer pedestal */
+  b.box(0.95, 1.26, 1.55, -2.00, 0.63, -3.50, C.drawer);
+  for (i = 0; i < 3; i++){
+    b.box(0.88, 0.34, 0.04, -2.00, 1.08 - i*0.38, -2.70, C.drawerF);
+    b.cyl(0.02, 0.02, 0.26, 6, -2.00, 1.08 - i*0.38, -2.66, C.metal, [0, 0, Math.PI/2]);
+  }
+
+  /* mini tower under the desk, two status LEDs */
+  b.box(0.44, 0.72, 0.62, 2.25, 0.36, -3.85, C.case);
+  for (i = 0; i < 5; i++) b.box(0.30, 0.025, 0.02, 2.25, 0.60 - i*0.07, -3.53, 0x14181f);
+  b.box(0.05, 0.05, 0.02, 2.12, 0.66, -3.53, 0x7fe0b8, 0, { glow: GLOW.mint, glowI: 0.55 });
+  b.box(0.04, 0.04, 0.02, 2.38, 0.66, -3.53, 0x6fd6f2, 0, { glow: GLOW.cyan, glowI: 0.35 });
+
+  /* ---- chair ---- */
+  var cx = -2.50, cz = -1.75, cr = 0.35;
+  b.box(0.72, 0.10, 0.68, cx, 0.96, cz, 0x3b3f4a, cr);
+  b.box(0.68, 0.84, 0.09, cx - 0.10, 1.44, cz - 0.28, 0x3b3f4a, [-0.11, cr, 0]);
+  b.cyl(0.055, 0.055, 0.50, 8, cx, 0.70, cz, C.metal);
+  b.cyl(0.10, 0.10, 0.07, 8, cx, 0.44, cz, C.dark);
+  for (i = 0; i < 5; i++){
+    a = cr + i * (Math.PI * 2 / 5);
+    b.box(0.52, 0.05, 0.08, cx + Math.sin(a)*0.26, 0.42, cz + Math.cos(a)*0.26, C.dark, a + Math.PI/2);
+    b.cyl(0.055, 0.055, 0.05, 6, cx + Math.sin(a)*0.50, 0.30, cz + Math.cos(a)*0.50, 0x1c2029, [Math.PI/2, 0, 0]);
+  }
+
+  /* ---- desk lamp: the key light, modelled where it is baked ---- */
+  b.cyl(0.19, 0.21, 0.05, 12, 2.55, 1.565, -4.05, C.dark);
+  b.cyl(0.035, 0.04, 1.45, 8, 2.55, 2.29, -4.05, C.dark);
+  b.ball(0.07, 7, 2.55, 3.00, -4.05, C.metal);
+  b.box(0.055, 0.055, 0.95, 2.25, 2.98, -3.72, C.dark, -0.785);
+  b.ball(0.06, 7, 1.95, 2.96, -3.40, C.metal);
+  b.cyl(0.10, 0.30, 0.32, 12, 1.95, 2.80, -3.40, C.dark);
+  b.cyl(0.27, 0.27, 0.02, 12, 1.95, 2.655, -3.40, 0xffcf96, 0, { glow: GLOW.warm, glowI: 0.72 });
+  b.ball(0.065, 6, 1.95, 2.70, -3.40, 0xffe2b4, { glow: GLOW.warm, glowI: 0.95 });
+
+  /* ---- project shelf + its LED strip ---- */
+  b.box(5.20, 0.09, 0.62, -0.60, 3.50, -4.25, C.shelf);
+  b.box(0.06, 0.30, 0.50, -2.90, 3.32, -4.28, C.metal);
+  b.box(0.06, 0.30, 0.50,  1.70, 3.32, -4.28, C.metal);
+  b.box(4.90, 0.04, 0.07, -0.60, 3.435, -3.98, 0xffe0b8, 0, { glow: GLOW.warm, glowI: 0.40 });
+
+  /* ---- pegboard on the left wall ---- */
+  b.box(0.06, 2.10, 2.50, -4.46, 3.00, -2.70, C.peg);
+  for (i = 0; i < 6; i++){
+    for (var j = 0; j < 8; j++){
+      b.box(0.02, 0.055, 0.055, -4.425, 2.25 + i*0.30, -3.75 + j*0.30, C.pegHole);
+    }
+  }
+  /* clip lamp: the practical that justifies the cool fill over here */
+  b.cyl(0.05, 0.05, 0.26, 8, -4.36, 4.14, -2.70, C.dark, [0, 0, 0.5]);
+  b.cyl(0.10, 0.19, 0.20, 10, -4.16, 4.02, -2.70, C.dark, [0, 0, -1.05]);
+  b.ball(0.055, 6, -4.06, 3.97, -2.70, 0xdfe9ff, { glow: [0.70,0.78,0.95], glowI: 0.70 });
+
+  /* ---- corkboard ---- */
+  b.box(0.05, 1.62, 2.00, -4.45, 2.85, -0.30, C.corkFrame);
+  b.box(0.03, 1.46, 1.84, -4.42, 2.85, -0.30, C.cork);
+
+  /* ---- clutter: the details that make it a place ---- */
+  b.cyl(0.105, 0.09, 0.17, 10, -2.55, 1.625, -3.05, C.mug);
+  b.cyl(0.092, 0.092, 0.012, 10, -2.55, 1.70, -3.05, C.coffee);
+
+  b.cyl(0.26, 0.19, 0.36, 10, 3.55, 0.18, -1.20, C.pot);
+  b.cyl(0.235, 0.235, 0.03, 10, 3.55, 0.37, -1.20, C.soil);
+  var leaves = [[0.0,0.42,0.55],[1.1,0.36,0.42],[2.2,0.40,0.62],[3.3,0.33,0.38],[4.4,0.38,0.50],[5.5,0.30,0.44]];
+  for (i = 0; i < leaves.length; i++){
+    a = leaves[i][0];
+    b.box(0.09, leaves[i][2], 0.20,
+          3.55 + Math.sin(a)*leaves[i][1], 0.40 + leaves[i][2]*0.46, -1.20 + Math.cos(a)*leaves[i][1],
+          C.leaf, [Math.cos(a)*0.42, a, Math.sin(a)*0.42]);
+  }
+
+  b.box(0.50, 0.08, 0.36, -3.50, 0.045, -0.60, C.bookA);
+  b.box(0.48, 0.07, 0.34, -3.48, 0.120, -0.58, C.bookB, 0.14);
+  b.box(0.46, 0.09, 0.33, -3.52, 0.200, -0.62, C.bookC, -0.09);
+
+  b.box(0.52, 0.06, 0.15, -1.20, 0.035, -4.22, 0x1f232c);
+  b.box(0.04, 0.02, 0.03, -1.38, 0.07, -4.16, 0x7fe0b8, 0, { glow: GLOW.mint, glowI: 0.5 });
+  b.box(0.04, 0.02, 0.03, -1.30, 0.07, -4.16, 0x95342c, 0, { glow: GLOW.red, glowI: 0.28 });
+
+  b.box(0.035, 0.52, 0.035, 0.62, 1.14, -4.26, C.cable, [0, 0, 0.16]);
+  b.box(0.035, 0.52, 0.035, 0.74, 0.66, -4.30, C.cable, [0, 0, 0.44]);
+  b.box(0.035, 0.40, 0.035, 0.99, 0.28, -4.32, C.cable, [0, 0, 1.02]);
+
+  return b.build();
+}
+</script>
+
+<script>
+/* ============================================================
+   UI LAYER
+   Panel rendering, the legend, and the no-WebGL document.
+   Knows nothing about Three.js: the 3D layer registers a focus
+   handler on it, and everything still works if that never happens.
+   ============================================================ */
+
+var UI = (function(){
+
+  var panel  = document.getElementById('panel');
+  var pbody  = document.getElementById('pbody');
+  var pidx   = document.getElementById('pidx');
+  var pback  = document.getElementById('pback');
+  var legend = document.getElementById('legend');
+  var resetB = document.getElementById('reset');
+
+  var current = null;
+  var onFocus = null;   /* set by the 3D layer */
+  var onClear = null;
+
+  function esc(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function rows(items, hl){
+    var h = '<ul class="p-list">';
+    for (var i = 0; i < items.length; i++){
+      var on = hl && items[i][2] === hl;
+      h += '<li><span class="k"' + (on ? ' style="color:#ffb45c"' : '') + '>' + esc(items[i][0]) +
+           '</span><span class="v">' + esc(items[i][1]) + '</span></li>';
+    }
+    return h + '</ul>';
+  }
+
+  function render(id, hl){
+    var d = CONTENT[id];
+    if (!d) return '';
+    var h = '', i;
+
+    h += '<p class="p-kick">' + esc(d.kicker) + '</p>';
+    h += '<h2 class="p-title">' + esc(d.title) + '</h2>';
+    if (d.sub) h += '<p class="p-sub">' + esc(d.sub) + '</p>';
+    if (d.status) h += '<div><span class="p-status ' + d.status[0] + '"><i></i>' + esc(d.status[1]) + '</span></div>';
+    h += '<hr class="p-rule">';
+
+    if (d.lead) h += '<div class="p-block p-lead"><p>' + esc(d.lead) + '</p></div>';
+
+    if (d.blocks){
+      for (i = 0; i < d.blocks.length; i++){
+        h += '<div class="p-block">';
+        if (d.blocks[i].h) h += '<h3>' + esc(d.blocks[i].h) + '</h3>';
+        h += '<p>' + esc(d.blocks[i].p) + '</p></div>';
+      }
+    }
+
+    if (d.groups){
+      var gr = [];
+      for (i = 0; i < d.groups.length; i++) gr.push([d.groups[i].h, d.groups[i].v, d.groups[i].id]);
+      h += '<div class="p-block">' + rows(gr, hl) + '</div>';
+    }
+
+    if (d.facts) h += '<div class="p-block"><h3>By the numbers</h3>' + rows(d.facts) + '</div>';
+
+    if (d.links){
+      h += '<div class="p-links">';
+      for (i = 0; i < d.links.length; i++){
+        h += '<a href="' + esc(d.links[i][2]) + '"' +
+             (d.links[i][2].indexOf('mailto:') === 0 ? '' : ' target="_blank" rel="noopener"') + '>' +
+             '<span class="k">' + esc(d.links[i][0]) + '</span>' +
+             '<span class="v">' + esc(d.links[i][1]) + '</span></a>';
+      }
+      h += '</div>';
+    }
+
+    if (d.tags){
+      h += '<div class="p-tags">';
+      for (i = 0; i < d.tags.length; i++) h += '<span>' + esc(d.tags[i]) + '</span>';
+      h += '</div>';
+    }
+
+    if (d.next){
+      h += '<div class="p-next">';
+      for (i = 0; i < d.next.length; i++){
+        var n = CONTENT[d.next[i]];
+        if (n) h += '<button data-go="' + d.next[i] + '">' + esc(n.title) + ' &rarr;</button>';
+      }
+      h += '</div>';
+    }
+    return h;
+  }
+
+  function open(id, hl){
+    if (!CONTENT[id]) return;
+    current = id;
+    pbody.innerHTML = render(id, hl);
+    pbody.scrollTop = 0;
+    var n = ORDER.indexOf(id);
+    pidx.textContent = n >= 0 ? (n + 1 < 10 ? '0' : '') + (n + 1) + ' / ' + ORDER.length : '';
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+    resetB.hidden = false;
+    markLegend(id);
+  }
+
+  function close(){
+    current = null;
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+    resetB.hidden = true;
+    markLegend(null);
+    if (onClear) onClear();
+  }
+
+  function markLegend(id){
+    var kids = legend.children;
+    for (var i = 0; i < kids.length; i++){
+      var on = !!id && kids[i].getAttribute('data-go') === id;
+      if (on) kids[i].classList.add('on'); else kids[i].classList.remove('on');
+    }
+  }
+
+  function go(id, hl){
+    if (onFocus) onFocus(id, hl);
+    else open(id, hl);
+  }
+
+  function hit(e){
+    var n = e.target;
+    while (n && n !== document){
+      if (n.getAttribute && n.getAttribute('data-go')) return n;
+      n = n.parentNode;
+    }
+    return null;
+  }
+
+  (function(){
+    var h = '';
+    for (var i = 0; i < LEGEND.length; i++){
+      h += '<button class="lg" data-go="' + LEGEND[i][0] + '">' + esc(LEGEND[i][1]) + '</button>';
+    }
+    legend.innerHTML = h;
+  })();
+
+  legend.addEventListener('click', function(e){ var t = hit(e); if (t) go(t.getAttribute('data-go')); });
+  pbody.addEventListener('click',  function(e){ var t = hit(e); if (t) go(t.getAttribute('data-go')); });
+  pback.addEventListener('click', close);
+  resetB.addEventListener('click', close);
+  document.addEventListener('keydown', function(e){
+    if ((e.key === 'Escape' || e.keyCode === 27) && current) close();
+  });
+
+  /* ---- the document the room falls back to ---- */
+  function buildFlat(){
+    var d = document.getElementById('flatdoc'), a = CONTENT.about, i, j, h = '';
+
+    h += '<p class="eyebrow">Portfolio</p><h1>' + esc(a.title) + '</h1>';
+    h += '<p class="role">' + esc(a.sub) + '</p>';
+    h += '<p class="lede">' + esc(a.lead) + '</p>';
+
+    h += '<h2>About</h2>';
+    for (i = 0; i < a.blocks.length; i++) h += '<p>' + esc(a.blocks[i].p) + '</p>';
+
+    h += '<h2>Experience</h2>';
+    var ex = ['exp_ai', 'exp_data', 'exp_snoonu'];
+    for (i = 0; i < ex.length; i++){
+      var e = CONTENT[ex[i]];
+      h += '<h3>' + esc(e.title) + '</h3><p class="meta">' + esc(e.sub) + '</p>';
+      for (j = 0; j < e.blocks.length; j++){
+        if (e.blocks[j].h) h += '<h4>' + esc(e.blocks[j].h) + '</h4>';
+        h += '<p>' + esc(e.blocks[j].p) + '</p>';
+      }
+    }
+
+    h += '<h2>Independent &amp; Exploratory Projects</h2>';
+    var pr = ['proj_konsul','proj_voice','proj_bank','proj_tanba','proj_speech','proj_segue','proj_terra'];
+    for (i = 0; i < pr.length; i++){
+      var p = CONTENT[pr[i]];
+      h += '<h3>' + esc(p.title) + '</h3><p class="meta">' + esc(p.sub) +
+           (p.status ? ' &nbsp;&middot;&nbsp; ' + esc(p.status[1]) : '') + '</p>';
+      h += '<p>' + esc(p.blocks[0].p) + '</p>';
+    }
+
+    h += '<h2>Technical Skills</h2><dl>';
+    for (i = 0; i < CONTENT.skills.groups.length; i++){
+      var g = CONTENT.skills.groups[i];
+      h += '<div><dt>' + esc(g.h) + '</dt><dd>' + esc(g.v) + '</dd></div>';
+    }
+    h += '</dl>';
+
+    h += '<h2>Education</h2><h3>' + esc(CONTENT.education.title) + '</h3>';
+    h += '<p class="meta">' + esc(CONTENT.education.sub) + '</p>';
+
+    h += '<h2>Contact</h2><dl>';
+    for (i = 0; i < CONTENT.contact.links.length; i++){
+      var L = CONTENT.contact.links[i];
+      h += '<div><dt>' + esc(L[0]) + '</dt><dd><a href="' + esc(L[2]) + '"' +
+           (L[2].indexOf('mailto:') === 0 ? '' : ' target="_blank" rel="noopener"') + '>' + esc(L[1]) + '</a></dd></div>';
+    }
+    h += '</dl>';
+    h += '<p class="note">This is the reading version. The interactive workshop needs WebGL, which this browser or device has turned off.</p>';
+
+    d.innerHTML = h;
+  }
+
+  function flat(){
+    buildFlat();
+    document.body.className = 'flat';
+    var boot = document.getElementById('boot');
+    if (boot) boot.className = 'gone';
+  }
+
+  return {
+    open: open, close: close, go: go, flat: flat,
+    isOpen: function(){ return !!current; },
+    setHandlers: function(f, c){ onFocus = f; onClear = c; }
+  };
+})();
+</script>
+
+<script>
+/* ============================================================
+   THE 3D LAYER
+   ============================================================ */
+(function(){
+
+if (typeof THREE === 'undefined'){ UI.flat(); return; }
+
+var canvas = document.getElementById('c');
+var renderer, gl;
+
+try {
+  renderer = new THREE.WebGLRenderer({
+    canvas: canvas, alpha: true, antialias: false,
+    powerPreference: 'default', stencil: false, depth: true
+  });
+  gl = renderer.getContext();
+  if (!gl) throw new Error('no context');
+} catch (err){ UI.flat(); return; }
+
+/* ---- capability tier ------------------------------------------------
+   Decides how much atmosphere the machine gets. Everything here degrades
+   detail, never layout: a low-tier machine sees the same room, lit the
+   same way, with fewer motes and a coarser buffer.                    */
+var LOW = false;
+try {
+  var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  if (dbg){
+    var rend = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '');
+    if (/GMA|945G|950|965|X3100|SwiftShader|llvmpipe|Mesa DRI|Microsoft Basic|Gallium/i.test(rend)) LOW = true;
+    if (/Intel.*HD Graphics(\s*(2000|3000))?(\s|$)/i.test(rend)) LOW = true;
+  }
+  if (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2) LOW = true;
+} catch (e){}
+
+var REDUCED = false;
+try { REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e){}
+
+var DPR_CAP = LOW ? 0.72 : Math.min(window.devicePixelRatio || 1, 1.5);
+var scale = LOW ? 0.62 : Math.min(window.devicePixelRatio || 1, 1.25);
+
+renderer.setClearColor(0x000000, 0);
+renderer.setPixelRatio(1);
+renderer.sortObjects = true;
+
+var scene  = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(34, 1, 0.5, 90);
+
+/* ---- helpers -------------------------------------------------------- */
+function screenMesh(t, w, h, x, y, z, rx, ry, rz, off){
+  var m = new THREE.Mesh(gPlane(w, h), new THREE.MeshBasicMaterial({ map: t }));
+  m.position.set(x, y, z);
+  m.rotation.set(rx || 0, ry || 0, rz || 0, 'YXZ');
+  m.translateZ(off === undefined ? 0.022 : off);
+  return m;
+}
+
+/* pulsing status lights get their own tiny merged mesh so one material
+   swap animates all of an object's LEDs at once */
+function ledMesh(hex, pts){
+  var pos = [], i, k;
+  for (i = 0; i < pts.length; i++){
+    var p = pts[i], s = p[3] || 0.038;
+    var g = gBox(s, s, s).toNonIndexed();
+    g.applyMatrix4(xf(p[0], p[1], p[2]));
+    var A = g.attributes.position.array;
+    for (k = 0; k < A.length; k++) pos.push(A[k]);
+    g.dispose();
+  }
+  var geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  var m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: hex }));
+  m.userData.pulse = true;
+  return m;
+}
+
+var DEG = Math.PI / 180;
+var SPOTS = [], SPOTBY = {}, PICK = [];
+
+function spot(id, label, view, build, hl){
+  var g = new THREE.Group(), extras = [], i;
+  var b = new Builder();
+  build(b, extras);
+  g.add(new THREE.Mesh(b.build(), bakedMat()));
+  for (i = 0; i < extras.length; i++) g.add(extras[i]);
+
+  var bb = new THREE.Box3().setFromObject(g);
+  var c = new THREE.Vector3();
+  bb.getCenter(c);
+
+  var s = {
+    id: id, label: label, hl: hl || null, group: g, center: c,
+    t: view[0] * DEG, p: view[1] * DEG, r: view[2],
+    mats: [], pulse: [], lit: 0
+  };
+  g.traverse(function(o){
+    if (!o.material) return;
+    o.userData.spot = s;
+    if (o.userData.pulse) s.pulse.push(o.material);
+    else s.mats.push({ m: o.material, c: o.material.color.clone() });
+  });
+  SPOTS.push(s);
+  if (!SPOTBY[id]) SPOTBY[id] = s;
+  PICK.push(g);
+  scene.add(g);
+  return s;
+}
+
+/* ---- the static room: one mesh, one draw call ---- */
+scene.add(new THREE.Mesh(buildRoom(), bakedMat()));
+
+/* ---- atmosphere ---- */
+var glowTex = radialTex('rgba(255,214,166,0.95)', 'rgba(255,170,90,0.30)', 64);
+
+/* the lamp's light shaft, additive, never writes depth so the desk
+   still occludes it correctly */
+var shaft = new THREE.Mesh(
+  gCyl(0.27, 0.86, 1.22, 14, true),
+  new THREE.MeshBasicMaterial({
+    map: shaftTex(), transparent: true, opacity: 0.85,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+  })
+);
+shaft.position.set(1.95, 2.04, -3.40);
+shaft.renderOrder = 2;
+scene.add(shaft);
+
+function bloom(x, y, z, size, tint, op){
+  var s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: tint, transparent: true, opacity: op,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  s.position.set(x, y, z);
+  s.scale.set(size, size, 1);
+  s.renderOrder = 3;
+  scene.add(s);
+  return s;
+}
+var bulbGlow = bloom(1.95, 2.70, -3.40, 1.05, 0xffc27a, 0.72);
+bloom(0.00, 2.60, -4.00, 1.70, 0x4aa8d8, 0.20);
+bloom(-0.60, 3.44, -4.00, 1.30, 0xffca92, 0.13);
+bloom(-4.08, 3.97, -2.70, 0.80, 0xbfd4ff, 0.26);
+
+/* dust in the lamp cone */
+var dust = null;
+if (!LOW && !REDUCED){
+  var N = 110, dp = new Float32Array(N * 3), dv = new Float32Array(N);
+  for (var i = 0; i < N; i++){
+    var ang = Math.random() * 6.2832, rad = Math.sqrt(Math.random()) * 0.82;
+    dp[i*3]   = 1.95 + Math.cos(ang) * rad;
+    dp[i*3+1] = 1.48 + Math.random() * 1.30;
+    dp[i*3+2] = -3.40 + Math.sin(ang) * rad;
+    dv[i] = 0.012 + Math.random() * 0.026;
+  }
+  var dg = new THREE.BufferGeometry();
+  dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+  dust = new THREE.Points(dg, new THREE.PointsMaterial({
+    map: radialTex('rgba(255,226,186,1)', 'rgba(255,196,130,0.5)', 32),
+    color: 0xffd7a4, size: 0.035, sizeAttenuation: true,
+    transparent: true, opacity: 0.52, blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  dust.userData.v = dv;
+  dust.renderOrder = 4;
+  scene.add(dust);
+}
+
+/* ---- contact shadows: every blob in one transparent mesh ---- */
+(function(){
+  var blobs = [
+    [1.45, 1.541, -3.30, 1.25], [0.00, 1.541, -4.02, 1.50], [-1.95, 1.541, -3.94, 1.05],
+    [-1.30, 1.541, -3.02, 0.90], [0.95, 1.541, -2.98, 0.85], [-2.55, 1.541, -3.05, 0.42],
+    [2.55, 1.541, -4.05, 0.62], [-2.50, 0.012, -1.75, 1.60], [3.55, 0.012, -1.20, 0.90],
+    [-3.50, 0.012, -0.60, 0.80], [2.25, 0.012, -3.85, 0.95]
+  ];
+  var pos = [], uv = [], q = [[-1,-1,0,0],[1,-1,1,0],[1,1,1,1],[-1,-1,0,0],[1,1,1,1],[-1,1,0,1]];
+  for (var i = 0; i < blobs.length; i++){
+    var B = blobs[i], h = B[3] * 0.5;
+    for (var k = 0; k < 6; k++){
+      pos.push(B[0] + q[k][0]*h, B[1], B[2] + q[k][1]*h);
+      uv.push(q[k][2], q[k][3]);
+    }
+  }
+  var g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  var m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+    map: radialTex('rgba(0,0,0,0.62)', 'rgba(0,0,0,0.26)', 64),
+    transparent: true, depthWrite: false, blending: THREE.NormalBlending, opacity: 0.85
+  }));
+  m.renderOrder = 1;
+  scene.add(m);
+})();
+
+/* ============================================================
+   HOTSPOTS
+   ============================================================ */
+
+var MB = 0x22262f, MS = 0x2a2f3a;
+
+/* --- experience: the monitor cluster --- */
+spot('exp_ai', 'Experience', [14, 76, 2.85], function(b, x){
+  b.box(0.58, 0.04, 0.34, 0, 1.562, -4.05, MS);
+  b.box(0.10, 0.50, 0.10, 0, 1.81, -4.05, MS);
+  b.box(1.98, 1.14, 0.07, 0, 2.60, -4.08, MB);
+  x.push(screenMesh(texCluster(), 1.86, 1.02, 0, 2.60, -4.08, 0, 0, 0, 0.038));
+});
+
+spot('exp_data', 'Experience', [34, 76, 2.35], function(b, x){
+  b.box(0.42, 0.04, 0.30, -1.95, 1.562, -3.95, MS, 0.38);
+  b.box(0.09, 0.44, 0.09, -1.95, 1.78, -3.95, MS, 0.38);
+  b.box(1.34, 0.88, 0.06, -1.95, 2.43, -3.98, MB, 0.38);
+  x.push(screenMesh(texDag(), 1.22, 0.76, -1.95, 2.43, -3.98, 0, 0.38, 0, 0.034));
+});
+
+spot('exp_snoonu', 'Experience', [6, 66, 2.05], function(b, x){
+  b.box(0.92, 0.045, 0.64, 1.45, 1.563, -3.30, MS, -0.40);
+  b.box(0.70, 0.010, 0.34, 1.419, 1.591, -3.226, 0x1a1e26, -0.40);
+  b.box(0.22, 0.008, 0.14, 1.357, 1.590, -3.079, 0x333a47, -0.40);
+  b.box(0.90, 0.60, 0.035, 1.607, 1.873, -3.671, MB, [-0.28, -0.40, 0]);
+  x.push(screenMesh(texCode(), 0.80, 0.50, 1.607, 1.873, -3.671, -0.28, -0.40, 0, 0.021));
+});
+
+/* --- about: the open notebook --- */
+spot('about', 'About', [22, 54, 1.95], function(b, x){
+  b.box(0.78, 0.03, 0.56, -1.30, 1.556, -3.02, 0x6e3a34, 0.20);
+  b.box(0.36, 0.014, 0.52, -1.481, 1.578, -2.983, 0xded4bd, 0.20);
+  b.box(0.36, 0.014, 0.52, -1.119, 1.578, -3.057, 0xded4bd, 0.20);
+  b.cyl(0.012, 0.012, 0.17, 6, -1.02, 1.582, -2.84, 0x2a2f3a, [0, 0.55, Math.PI/2]);
+  x.push(screenMesh(texPage(), 0.34, 0.50, -1.481, 1.586, -2.983, -Math.PI/2, 0.20, 0, 0.001));
+});
+
+/* --- contact: the mail tray --- */
+spot('contact', 'Contact', [36, 52, 1.85], function(b, x){
+  b.box(0.60, 0.03, 0.44, 0.95, 1.556, -2.98, 0x4e3a2a, -0.16);
+  b.box(0.025, 0.11, 0.44, 1.236, 1.60, -2.934, 0x4e3a2a, -0.16);
+  b.box(0.025, 0.11, 0.44, 0.664, 1.60, -3.026, 0x4e3a2a, -0.16);
+  b.box(0.50, 0.012, 0.36, 0.95, 1.582, -2.98, 0xe4dcc8, -0.10);
+  b.box(0.50, 0.012, 0.36, 0.95, 1.596, -2.98, 0xd6cdb6, -0.24);
+  b.box(0.50, 0.012, 0.36, 0.95, 1.610, -2.98, 0xe8e0cc, -0.06);
+  b.box(0.15, 0.022, 0.30, 0.60, 1.567, -2.70, 0x1e2129, -0.30);
+  b.box(0.12, 0.004, 0.25, 0.60, 1.580, -2.70, 0x2e5c70, -0.30, { glow: GLOW.cyan, glowI: 0.22 });
+});
+
+/* --- projects: the shelf --- */
+spot('proj_konsul', 'Project', [22, 79, 1.70], function(b, x){
+  b.box(0.36, 0.05, 0.26, -2.75, 3.572, -4.24, 0x2b4a6e);
+  b.box(0.34, 0.045, 0.24, -2.75, 3.620, -4.22, 0x1e3855, 0.13);
+  b.box(0.30, 0.008, 0.20, -2.75, 3.646, -4.22, 0xc9ad6a, 0.13);
+  b.cyl(0.062, 0.072, 0.11, 8, -2.48, 3.602, -4.16, 0x8a3a30);
+  x.push(ledMesh(0xffb45c, [[-2.48, 3.672, -4.16, 0.036]]));
+});
+
+spot('proj_voice', 'Project', [22, 79, 1.70], function(b, x){
+  b.box(0.32, 0.09, 0.26, -1.65, 3.592, -4.24, 0x2e3340);
+  b.box(0.30, 0.07, 0.10, -1.65, 3.672, -4.19, 0x3b4150, 0.06);
+  b.box(0.08, 0.11, 0.11, -1.79, 3.668, -4.20, 0x3b4150, 0.06);
+  b.box(0.08, 0.11, 0.11, -1.51, 3.668, -4.18, 0x3b4150, 0.06);
+  b.box(0.16, 0.012, 0.13, -1.65, 3.643, -4.30, 0x1b1f27);
+  x.push(ledMesh(0xffb45c, [[-1.84, 3.60, -4.29, 0.032]]));
+});
+
+spot('proj_bank', 'Project', [20, 78, 1.70], function(b, x){
+  b.box(0.32, 0.32, 0.28, -0.55, 3.706, -4.24, 0x3a4050);
+  b.box(0.27, 0.27, 0.03, -0.55, 3.706, -4.10, 0x474e60);
+  b.cyl(0.052, 0.052, 0.04, 10, -0.55, 3.706, -4.075, C.metal, [Math.PI/2, 0, 0]);
+  b.box(0.022, 0.17, 0.022, -0.44, 3.706, -4.075, C.metal, [0, 0, 0.62]);
+  x.push(ledMesh(0x7fe0b8, [[-0.66, 3.84, -4.096, 0.030]]));
+});
+
+spot('proj_tanba', 'Project', [20, 78, 1.65], function(b, x){
+  b.box(0.34, 0.02, 0.30, 0.55, 3.556, -4.24, 0x2c3140);
+  var eg = new THREE.EdgesGeometry(gBox(0.30, 0.30, 0.30));
+  var wire = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x5b9bd5 }));
+  wire.position.set(0.55, 3.72, -4.24);
+  x.push(wire);
+  var ghost = new THREE.Mesh(gBox(0.30, 0.30, 0.30), new THREE.MeshBasicMaterial({
+    color: 0x2a4a6e, transparent: true, opacity: 0.22, depthWrite: false
+  }));
+  ghost.position.set(0.55, 3.72, -4.24);
+  ghost.renderOrder = 1;
+  x.push(ghost);
+});
+
+spot('proj_speech', 'Project', [20, 76, 1.70], function(b, x){
+  b.box(0.26, 0.03, 0.24, 1.65, 3.560, -4.24, 0x2c3140);
+  b.cyl(0.11, 0.13, 0.04, 10, 1.65, 3.595, -4.24, 0x3b4150);
+  b.cyl(0.024, 0.024, 0.26, 6, 1.65, 3.745, -4.24, C.metal);
+  b.ball(0.078, 8, 1.65, 3.92, -4.24, 0x474e60);
+  b.cyl(0.082, 0.082, 0.012, 10, 1.65, 3.895, -4.24, 0x2a2f3a);
+  b.cyl(0.082, 0.082, 0.012, 10, 1.65, 3.945, -4.24, 0x2a2f3a);
+  x.push(ledMesh(0xffb45c, [[1.65, 3.633, -4.16, 0.030]]));
+});
+
+/* --- concepts: pinned to the corkboard --- */
+spot('proj_segue', 'Concept', [74, 80, 1.55], function(b, x){
+  b.box(0.54, 0.66, 0.014, -4.400, 3.12, -0.85, 0xd8cdb4, [0, Math.PI/2, 0.06]);
+  b.ball(0.022, 6, -4.375, 3.41, -0.85, 0xb4442f);
+  x.push(screenMesh(texSketch('wave'), 0.52, 0.64, -4.400, 3.12, -0.85, 0, Math.PI/2, 0.06, 0.010));
+});
+
+spot('proj_terra', 'Concept', [74, 82, 1.55], function(b, x){
+  b.box(0.54, 0.66, 0.014, -4.400, 2.60, 0.18, 0xd8cdb4, [0, Math.PI/2, -0.05]);
+  b.ball(0.022, 6, -4.375, 2.89, 0.18, 0xb4442f);
+  x.push(screenMesh(texSketch('grid'), 0.52, 0.64, -4.400, 2.60, 0.18, 0, Math.PI/2, -0.05, 0.010));
+});
+
+/* --- skills: four tools on the pegboard, one panel --- */
+spot('skills', 'Languages', [76, 78, 1.55], function(b){
+  for (var i = 0; i < 3; i++){
+    var z = -3.64 + i * 0.09;
+    b.box(0.055, 0.15, 0.055, -4.37, 3.26, z, 0x6e3a24);
+    b.cyl(0.019, 0.015, 0.21, 6, -4.37, 3.07, z, 0x7f8798);
+  }
+}, 'lang');
+
+spot('skills', 'Backend & Infra', [76, 78, 1.55], function(b){
+  b.box(0.05, 0.40, 0.045, -4.37, 3.05, -3.00, 0x7f8798);
+  b.box(0.14, 0.11, 0.05, -4.37, 3.28, -3.00, 0x7f8798);
+  b.box(0.06, 0.06, 0.06, -4.365, 3.31, -3.00, C.peg);
+  b.box(0.12, 0.10, 0.05, -4.37, 2.83, -3.00, 0x7f8798);
+  b.box(0.05, 0.05, 0.06, -4.365, 2.80, -3.00, C.peg);
+}, 'infra');
+
+spot('skills', 'Data Engineering', [76, 78, 1.55], function(b){
+  b.cyl(0.062, 0.062, 0.32, 8, -4.37, 3.10, -2.45, 0x5d6b7a);
+  b.cyl(0.088, 0.088, 0.03, 8, -4.37, 3.25, -2.45, 0x7f8798);
+  b.cyl(0.088, 0.088, 0.03, 8, -4.37, 2.95, -2.45, 0x7f8798);
+  b.cyl(0.062, 0.062, 0.24, 8, -4.37, 2.94, -2.33, 0x5d6b7a, [Math.PI/2, 0, 0]);
+  b.cyl(0.095, 0.095, 0.022, 10, -4.37, 3.30, -2.45, 0x8a4a3a, [Math.PI/2, 0, 0]);
+}, 'data');
+
+spot('skills', 'AI/ML Systems', [76, 78, 1.55], function(b, x){
+  b.box(0.035, 0.28, 0.32, -4.375, 3.05, -1.90, 0x2a5a42);
+  b.box(0.022, 0.09, 0.11, -4.352, 3.09, -1.94, 0x14181f);
+  b.box(0.018, 0.05, 0.06, -4.350, 2.96, -1.82, 0x14181f);
+  b.box(0.016, 0.03, 0.14, -4.350, 3.15, -1.80, 0xb08a3a);
+  b.box(0.016, 0.10, 0.02, -4.350, 3.00, -1.98, 0xb08a3a);
+  x.push(ledMesh(0x6fd6f2, [[-4.348, 2.93, -1.97, 0.026]]));
+}, 'ai');
+
+/* --- education --- */
+spot('education', 'Education', [26, 76, 1.80], function(b, x){
+  b.box(0.80, 0.64, 0.05, 2.75, 3.95, -4.46, 0x4a3a28);
+  b.box(0.70, 0.54, 0.02, 2.75, 3.95, -4.43, 0xded4bd);
+  x.push(screenMesh(texDiploma(), 0.66, 0.50, 2.75, 3.95, -4.43, 0, 0, 0, 0.012));
+});
+
+/* the three live screens flicker; the paper and the diploma do not */
+var SPOTHL = {}, i2, j2;
+for (i2 = 0; i2 < SPOTS.length; i2++) if (SPOTS[i2].hl) SPOTHL[SPOTS[i2].hl] = SPOTS[i2];
+var lively = ['exp_ai', 'exp_data', 'exp_snoonu'];
+for (i2 = 0; i2 < lively.length; i2++){
+  var sp2 = SPOTBY[lively[i2]];
+  for (j2 = 0; j2 < sp2.mats.length; j2++) if (sp2.mats[j2].m.map) sp2.mats[j2].fl = true;
+}
+
+/* ============================================================
+   CAMERA
+   State lives in spherical coordinates, not in the camera object,
+   so every constraint is enforced before the camera ever moves.
+   The camera cannot be put through the floor or behind a wall,
+   by a drag or by a framing tween.
+   ============================================================ */
+
+var LIM = { thMin: -8*DEG, thMax: 98*DEG, phMin: 22*DEG, phMax: 84*DEG, rMin: 7, rMax: 23 };
+var ANIM = !LOW && !REDUCED;
+
+var st   = { t: new THREE.Vector3(0, 1.95, -1.55), r: 13.6, th: 45*DEG, ph: 66*DEG };
+var home = { t: new THREE.Vector3(0, 1.95, -1.55), r: 13.6, th: 45*DEG, ph: 66*DEG };
+
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+
+function applyCam(){
+  var sp = Math.sin(st.ph), cp = Math.cos(st.ph);
+  camera.position.set(
+    st.t.x + st.r * sp * Math.sin(st.th),
+    st.t.y + st.r * cp,
+    st.t.z + st.r * sp * Math.cos(st.th)
+  );
+  camera.lookAt(st.t);
+}
+
+function homeRadius(){
+  var w = canvas.clientWidth || window.innerWidth;
+  var h = canvas.clientHeight || window.innerHeight;
+  var a = w / (h || 1), r = 13.6;
+  if (a < 1) r *= 1 + (1 - a) * 0.90;
+  else if (a > 2.2) r *= 0.93;
+  return clamp(r, LIM.rMin, LIM.rMax);
+}
+
+/* ---- framing a hotspot ---- */
+function framing(s){
+  var t = s.center.clone(), r = s.r;
+  if ((canvas.clientWidth || window.innerWidth) <= 860){
+    t.y -= r * 0.17;                       /* bottom sheet: lift the object */
+  } else {
+    var rx = Math.cos(s.t), rz = -Math.sin(s.t);
+    t.x += rx * r * 0.30;                  /* side panel: shift the object left */
+    t.z += rz * r * 0.30;
+  }
+  return { t: t, r: r, th: s.t, ph: clamp(s.p, LIM.phMin, LIM.phMax) };
+}
+
+var tw = null, focused = null;
+function ease(x){ return x < 0.5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3) / 2; }
+function easeOut(x){ return 1 - Math.pow(1 - x, 3); }
+
+function tweenTo(to, dur, fn, easer){
+  if (REDUCED){
+    st.t.copy(to.t); st.r = to.r; st.th = to.th; st.ph = to.ph;
+    applyCam(); need = true; if (fn) fn();
+    return;
+  }
+  var dth = to.th - st.th;
+  while (dth >  Math.PI) dth -= Math.PI*2;
+  while (dth < -Math.PI) dth += Math.PI*2;
+  tw = {
+    f: { t: st.t.clone(), r: st.r, th: st.th, ph: st.ph },
+    to: to, dth: dth, t0: 0, dur: dur || 1000, fn: fn || null, e: easer || ease
+  };
+}
+
+function focus(id, hl){
+  var s = (hl && SPOTHL[hl]) || SPOTBY[id];
+  if (!s){ UI.open(id, hl); return; }
+  focused = s;
+  LIM.rMin = 1.1;
+  tweenTo(framing(s), 1000);
+  UI.open(id, hl || s.hl);
+  need = true;
+}
+
+function unfocus(){
+  if (!focused && !tw) return;
+  focused = null;
+  home.r = homeRadius();
+  tweenTo({ t: home.t.clone(), r: home.r, th: home.th, ph: home.ph }, 900, function(){
+    LIM.rMin = 7;
+  });
+  need = true;
+}
+
+UI.setHandlers(function(id, hl){ focus(id, hl); }, function(){ unfocus(); });
+
+/* ============================================================
+   INPUT
+   Plain mouse and touch events rather than Pointer Events, which
+   the older browsers this has to run on do not have.
+   ============================================================ */
+
+var drag = false, lx = 0, ly = 0, moved = 0, vth = 0, vph = 0, pinch = 0;
+
+function rotateBy(dx, dy){
+  st.th = clamp(st.th - dx * 0.0055, LIM.thMin, LIM.thMax);
+  st.ph = clamp(st.ph - dy * 0.0055, LIM.phMin, LIM.phMax);
+  need = true;
+}
+function zoomBy(f){
+  st.r = clamp(st.r * f, LIM.rMin, LIM.rMax);
+  need = true;
+}
+
+function down(x, y){
+  drag = true; lx = x; ly = y; moved = 0; vth = vph = 0; tw = null;
+  canvas.className = 'dragging';
+}
+function move(x, y){
+  var dx = x - lx, dy = y - ly;
+  lx = x; ly = y;
+  moved += Math.abs(dx) + Math.abs(dy);
+  vth = -dx * 0.0055; vph = -dy * 0.0055;
+  rotateBy(dx, dy);
+}
+function up(){
+  if (!drag) return;
+  drag = false;
+  canvas.className = hover ? 'over' : '';
+}
+
+canvas.addEventListener('mousedown', function(e){ e.preventDefault(); down(e.clientX, e.clientY); });
+window.addEventListener('mousemove', function(e){
+  if (drag) move(e.clientX, e.clientY);
+  else { mx = e.clientX; my = e.clientY; wantPick = true; }
+});
+window.addEventListener('mouseup', function(e){
+  var wasDrag = moved > 6;
+  up();
+  if (!wasDrag && e.target === canvas) pickAt(e.clientX, e.clientY);
+});
+canvas.addEventListener('wheel', function(e){
+  e.preventDefault();
+  zoomBy(1 + clamp(e.deltaY, -120, 120) * 0.0014);
+}, false);
+
+canvas.addEventListener('touchstart', function(e){
+  if (e.touches.length === 1){ down(e.touches[0].clientX, e.touches[0].clientY); }
+  else if (e.touches.length === 2){
+    drag = false;
+    pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                       e.touches[0].clientY - e.touches[1].clientY);
+  }
+}, false);
+canvas.addEventListener('touchmove', function(e){
+  e.preventDefault();
+  if (e.touches.length === 1 && drag){ move(e.touches[0].clientX, e.touches[0].clientY); }
+  else if (e.touches.length === 2){
+    var d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                       e.touches[0].clientY - e.touches[1].clientY);
+    if (pinch) zoomBy(pinch / (d || 1));
+    pinch = d;
+  }
+}, false);
+canvas.addEventListener('touchend', function(e){
+  var wasDrag = moved > 10;
+  var t = e.changedTouches && e.changedTouches[0];
+  up(); pinch = 0;
+  if (!wasDrag && t) pickAt(t.clientX, t.clientY);
+}, false);
+
+/* ============================================================
+   PICKING
+   ============================================================ */
+
+var ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+var hover = null, mx = 0, my = 0, wantPick = false, lastPick = 0;
+var tagEl = document.getElementById('tag');
+var tagK  = document.getElementById('tagk');
+var tagV  = document.getElementById('tagv');
+
+function hitAt(x, y){
+  var r = canvas.getBoundingClientRect();
+  ndc.x = ((x - r.left) / r.width) * 2 - 1;
+  ndc.y = -((y - r.top) / r.height) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
+  var hits = ray.intersectObjects(PICK, true);
+  for (var i = 0; i < hits.length; i++){
+    var s = hits[i].object.userData.spot;
+    if (s) return s;
+  }
+  return null;
+}
+
+function setHover(s){
+  if (hover === s) return;
+  hover = s;
+  need = true;
+  if (!drag) canvas.className = s ? 'over' : '';
+  if (s){
+    tagK.textContent = s.label;
+    tagV.textContent = CONTENT[s.id] ? CONTENT[s.id].title : '';
+    tagEl.className = 'on';
+  } else {
+    tagEl.className = '';
+  }
+}
+
+function pickAt(x, y){
+  var s = hitAt(x, y);
+  if (s) focus(s.id, s.hl);
+  else if (UI.isOpen()) UI.close();
+}
+
+function placeTag(){
+  if (!hover) return;
+  var v = hover.center.clone().project(camera);
+  var r = canvas.getBoundingClientRect();
+  tagEl.style.left = (r.left + (v.x * 0.5 + 0.5) * r.width) + 'px';
+  tagEl.style.top  = (r.top + (-v.y * 0.5 + 0.5) * r.height) + 'px';
+}
+
+/* ============================================================
+   RENDER LOOP
+   Renders only when something has actually changed. On a machine
+   that does not get ambient animation, an untouched room costs
+   nothing at all: the loop parks and the GPU goes idle.
+   ============================================================ */
+
+var need = true, prev = 0, clock = 0, idleAcc = 0;
+var IDLE_STEP = ANIM ? 1 / 30 : 1e9;
+var fAcc = 0, fN = 0;
+
+function resize(){
+  var w = canvas.clientWidth || window.innerWidth;
+  var h = canvas.clientHeight || window.innerHeight;
+  renderer.setPixelRatio(scale);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / (h || 1);
+  camera.updateProjectionMatrix();
+  home.r = homeRadius();
+  if (!focused && !tw) st.r = clamp(st.r, LIM.rMin, LIM.rMax);
+  need = true;
+}
+window.addEventListener('resize', resize);
+
+function materials(t){
+  for (var i = 0; i < SPOTS.length; i++){
+    var s = SPOTS[i];
+    var want = (s === hover || s === focused) ? 1 : 0;
+    if (s.lit !== want){
+      s.lit += (want - s.lit) * 0.24;
+      if (Math.abs(want - s.lit) < 0.01) s.lit = want;
+      need = true;
+    }
+    var k = 1 + 0.58 * s.lit;
+    for (var j = 0; j < s.mats.length; j++){
+      var e = s.mats[j];
+      var kk = (e.fl && ANIM) ? k * (0.94 + 0.06 * Math.sin(t * 5.1 + j * 2.1)) : k;
+      e.m.color.copy(e.c).multiplyScalar(kk);
+    }
+    for (var p = 0; p < s.pulse.length; p++){
+      var m = s.pulse[p];
+      if (!m.userData.base) m.userData.base = m.color.clone();
+      var pk = ANIM ? (0.42 + 0.58 * (0.5 + 0.5 * Math.sin(t * 2.1 + i * 1.7))) : 0.9;
+      m.color.copy(m.userData.base).multiplyScalar(pk * (1 + 0.5 * s.lit));
+    }
+  }
+}
+
+function ambient(t, dt){
+  if (dust){
+    var P = dust.geometry.attributes.position.array, V = dust.userData.v;
+    for (var i = 0; i < V.length; i++){
+      P[i*3+1] += V[i] * dt;
+      P[i*3]   += Math.sin(t * 0.6 + i) * 0.00035;
+      if (P[i*3+1] > 2.72){
+        var a = Math.random() * 6.2832, rr = Math.sqrt(Math.random()) * 0.82;
+        P[i*3] = 1.95 + Math.cos(a) * rr;
+        P[i*3+1] = 1.48;
+        P[i*3+2] = -3.40 + Math.sin(a) * rr;
+      }
+    }
+    dust.geometry.attributes.position.needsUpdate = true;
+  }
+  bulbGlow.material.opacity = 0.68 + 0.06 * Math.sin(t * 3.7);
+}
+
+function loop(now){
+  requestAnimationFrame(loop);
+  if (!prev) prev = now;
+  var dt = Math.min(0.05, (now - prev) / 1000);
+  prev = now;
+  clock += dt;
+
+  /* inertia after a flick */
+  if (!drag && (Math.abs(vth) > 1e-5 || Math.abs(vph) > 1e-5)){
+    st.th = clamp(st.th + vth, LIM.thMin, LIM.thMax);
+    st.ph = clamp(st.ph + vph, LIM.phMin, LIM.phMax);
+    vth *= 0.90; vph *= 0.90;
+    if (Math.abs(vth) < 1e-5) vth = 0;
+    if (Math.abs(vph) < 1e-5) vph = 0;
+    need = true;
+  }
+
+  if (tw){
+    if (!tw.t0) tw.t0 = now;
+    var k = clamp((now - tw.t0) / tw.dur, 0, 1), e = tw.e(k);
+    st.t.lerpVectors(tw.f.t, tw.to.t, e);
+    st.r  = tw.f.r  + (tw.to.r - tw.f.r) * e;
+    st.ph = tw.f.ph + (tw.to.ph - tw.f.ph) * e;
+    st.th = tw.f.th + tw.dth * e;
+    need = true;
+    if (k >= 1){ var f = tw.fn; tw = null; if (f) f(); }
+  }
+
+  if (wantPick && !drag && now - lastPick > 55){
+    lastPick = now; wantPick = false;
+    setHover(hitAt(mx, my));
+  }
+
+  idleAcc += dt;
+  var busy = drag || tw || vth || vph;
+  if (!need && !busy && idleAcc < IDLE_STEP) return;
+  if (idleAcc >= IDLE_STEP) idleAcc = 0;
+
+  materials(clock);
+  if (ANIM) ambient(clock, dt);
+  applyCam();
+  renderer.render(scene, camera);
+  placeTag();
+  need = false;
+
+  /* adaptive buffer scale: fill rate is what old integrated GPUs run
+     out of first, so trade pixels, never geometry or lighting */
+  fAcc += dt; fN++;
+  if (fN >= 42){
+    var ms = (fAcc / fN) * 1000;
+    fAcc = 0; fN = 0;
+    if (ms > 26 && scale > 0.45){ scale = Math.max(0.45, scale - 0.10); resize(); }
+    else if (ms < 12.5 && scale < DPR_CAP){ scale = Math.min(DPR_CAP, scale + 0.06); resize(); }
+  }
+}
+
+/* ---- go ---- */
+resize();
+home.r = homeRadius();
+st.r = home.r;
+
+if (REDUCED){
+  st.th = home.th; st.ph = home.ph;
+} else {
+  st.r = Math.min(home.r * 1.42, LIM.rMax);
+  st.th = 62 * DEG;
+  st.ph = 50 * DEG;
+  tweenTo({ t: home.t.clone(), r: home.r, th: home.th, ph: home.ph }, 2000, null, easeOut);
+}
+applyCam();
+renderer.render(scene, camera);
+
+var boot = document.getElementById('boot');
+setTimeout(function(){ boot.className = 'gone'; }, 140);
+requestAnimationFrame(loop);
+
+})();
+</script>
