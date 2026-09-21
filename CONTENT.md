@@ -98,6 +98,22 @@ Designing shared API patterns for STT/TTS using the sans-IO principle, so the sa
 
 ---
 
+## Endurance Sports
+
+Systems work is a desk job — this is the counterweight. I train across running, cycling, and swimming, usually alongside a weekend training group, chasing the same discipline in racing that I bring to production systems: pace yourself, trust the data, don't blow up under load.
+
+**Gear**
+- **Running:** Adidas EVO SL, black
+- **Cycling:** Specialized S-Works SL9, black
+- **Swimming:** Open-water and pool training kit — wetsuit, goggles, the essentials
+
+**Race Results**
+- Almaty Marathon — 21K — 2:20:00
+- Astana Half Marathon — 21K — 1:55:00
+- Silk Road Triathlon Series — 1.5K swim leg — 42:00
+
+---
+
 ## Contact
 
 - Email: sanzharyermek@gmail.com

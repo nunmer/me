@@ -233,6 +233,24 @@ a:hover{border-bottom-color:var(--cyan)}
   font-family:var(--mono);font-size:12px;line-height:1.75;color:#cdd4df;
 }
 
+/* race results: event, distance, finish time. Times are the point, so they
+   get tabular figures and sit hard right where the eye scans for them. */
+.p-races{list-style:none;margin:0;padding:0}
+.p-races li{
+  display:grid;grid-template-columns:1fr auto auto;gap:10px 14px;align-items:baseline;
+  padding:11px 0;border-top:1px solid rgba(44,52,70,.55);
+}
+.p-races li:first-child{border-top:0}
+.p-races .ev{font-family:var(--body);font-size:15.5px;color:#dde3ec;line-height:1.4}
+.p-races .di{
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--dim);white-space:nowrap;
+}
+.p-races .ti{
+  font-family:var(--mono);font-size:14px;font-weight:700;color:var(--amber);
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+
 .p-tags{display:flex;flex-wrap:wrap;gap:6px;margin:20px 0 0}
 .p-tags span{
   font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);
@@ -395,7 +413,7 @@ var CONTENT = {
       { p: 'My work spans the full stack of modern AI engineering: standing up self-hosted model clusters and the gateways that govern them, building OCR and vision pipelines that read contracts a human would take minutes to parse, and architecting voice analytics systems that turn thousands of hours of call-center audio into actionable, per-agent intelligence. I care about systems that are fast in production, not just fast in a demo: sub-second latency under real load, horizontal scaling that holds up at 3am, and architecture that survives contact with actual users.' },
       { p: 'Outside of work, I prototype and ship independent projects, from civic-tech platforms to conversational banking assistants, usually going from architecture diagram to working system in days, not sprints.' }
     ],
-    next: ['exp_ai', 'skills', 'contact']
+    next: ['exp_ai', 'skills', 'sports']
   },
 
   exp_ai: {
@@ -550,7 +568,27 @@ var CONTENT = {
     blocks: [
       { p: 'Computer Science degree completed alongside the first two years of professional backend work, which is why the Snoonu internship and the ForteBank data role overlap the coursework rather than follow it.' }
     ],
-    next: ['exp_snoonu', 'contact']
+    next: ['sports', 'exp_snoonu']
+  },
+
+  sports: {
+    kicker: 'The gear corner',
+    title: 'Endurance Sports',
+    sub: 'Running, cycling, swimming',
+    blocks: [
+      { p: 'Systems work is a desk job, and this is the counterweight. I train across running, cycling, and swimming, usually alongside a weekend training group, chasing the same discipline in racing that I bring to production systems: pace yourself, trust the data, do not blow up under load.' }
+    ],
+    groups: [
+      { id: 'running',  h: 'Running',  v: 'Adidas EVO SL, black' },
+      { id: 'cycling',  h: 'Cycling',  v: 'Specialized S-Works SL9, black' },
+      { id: 'swimming', h: 'Swimming', v: 'Open-water and pool training kit: wetsuit, goggles, the essentials' }
+    ],
+    races: [
+      ['Almaty Marathon', '21K', '2:20:00'],
+      ['Astana Half Marathon', '21K', '1:55:00'],
+      ['Silk Road Triathlon Series', '1.5K swim leg', '42:00']
+    ],
+    next: ['about', 'contact']
   },
 
   contact: {
@@ -568,12 +606,12 @@ var CONTENT = {
 
 /* Order drives the "N / 16" counter and the static fallback document. */
 var ORDER = ['about','exp_ai','exp_data','exp_snoonu','proj_konsul','proj_voice','proj_bank',
-             'proj_tanba','proj_speech','proj_segue','proj_terra','skills','education','contact'];
+             'proj_tanba','proj_speech','proj_segue','proj_terra','skills','education','sports','contact'];
 
-/* Bottom-left legend: the six rooms-within-the-room. */
+/* Bottom-left legend: the rooms-within-the-room. */
 var LEGEND = [
   ['about','About'], ['exp_ai','Experience'], ['proj_konsul','Projects'],
-  ['skills','Skills'], ['education','Education'], ['contact','Contact']
+  ['skills','Skills'], ['education','Education'], ['sports','Sports'], ['contact','Contact']
 ];
 </script>
 
@@ -597,7 +635,10 @@ var LIGHTS = [
   /* clip lamp on the pegboard, keeps the left wall readable */
   { p:[-4.05, 4.05, -2.70], c:[0.78, 0.86, 1.00], i:2.0, a:0.55, b:0.60 },
   /* dim warm bounce off the floor at the open front of the diorama */
-  { p:[1.20, 0.45, 1.60], c:[0.62, 0.48, 0.36], i:1.1, a:0.40, b:0.22 }
+  { p:[1.20, 0.45, 1.60], c:[0.62, 0.48, 0.36], i:1.1, a:0.40, b:0.22 },
+  /* cool daylight spilling in across the open front-left, which is what
+     makes the gear corner readable so far from the desk lamp */
+  { p:[-2.90, 2.00, 3.10], c:[0.68, 0.76, 0.94], i:1.9, a:0.46, b:0.34 }
 ];
 
 var SKY = [0.150, 0.190, 0.285];   // cool ambient from above
@@ -691,6 +732,11 @@ function gPlane(w, h){
   if (!_geoCache[k]) _geoCache[k] = new THREE.PlaneGeometry(w, h);
   return _geoCache[k];
 }
+function gTorus(r, t, rs, ts){
+  var k = 't' + r + '_' + t + '_' + rs + '_' + ts;
+  if (!_geoCache[k]) _geoCache[k] = new THREE.TorusGeometry(r, t, rs || 5, ts || 16);
+  return _geoCache[k];
+}
 
 var _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(),
     _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1,1,1);
@@ -702,12 +748,17 @@ function xf(x, y, z, rx, ry, rz){
   return new THREE.Matrix4().compose(_p, _q, _s);
 }
 
-function Builder(){ this.pos = []; this.col = []; }
+function Builder(){ this.pos = []; this.col = []; this.baseM = null; }
+
+/* Lets an object be authored in convenient local coordinates and then placed
+   once. The bake still runs on final world positions, so lighting stays
+   correct: the base matrix is folded in before any vertex is shaded. */
+Builder.prototype.setBase = function(m){ this.baseM = m; return this; };
 
 Builder.prototype.push = function(geo, mat, colorHex, opt){
   opt = opt || {};
   var g = geo.index ? geo.toNonIndexed() : geo.clone();
-  g.applyMatrix4(mat);
+  g.applyMatrix4(this.baseM ? new THREE.Matrix4().multiplyMatrices(this.baseM, mat) : mat);
   var P = g.attributes.position.array, N = g.attributes.normal.array;
   var base = typeof colorHex === 'number' ? hex2rgb(colorHex) : colorHex;
   var glow = opt.glow ? (typeof opt.glow === 'number' ? hex2rgb(opt.glow) : opt.glow) : null;
@@ -952,7 +1003,7 @@ function texDiploma(){
    ============================================================ */
 
 var C = {
-  floor:0x3a2e24, rug:0x463a4e,
+  floor:0x3a2e24, rug:0x38303f,
   wall:0x2b303c, wallL:0x262b36, batten:0x343b4c, skirt:0x4a3f33,
   desk:0x7a5537, deskDark:0x5e4128, drawer:0x4f3a29, drawerF:0x6b4e35,
   metal:0x545b6b, dark:0x2e3340, case:0x232833,
@@ -1031,7 +1082,7 @@ function buildRoom(){
   b.box(5.20, 0.09, 0.62, -0.60, 3.50, -4.25, C.shelf);
   b.box(0.06, 0.30, 0.50, -2.90, 3.32, -4.28, C.metal);
   b.box(0.06, 0.30, 0.50,  1.70, 3.32, -4.28, C.metal);
-  b.box(4.90, 0.04, 0.07, -0.60, 3.435, -3.98, 0xffe0b8, 0, { glow: GLOW.warm, glowI: 0.40 });
+  b.box(4.90, 0.04, 0.07, -0.60, 3.435, -3.98, 0xa8825c, 0, { glow: GLOW.warm, glowI: 0.16 });
 
   /* ---- pegboard on the left wall ---- */
   b.box(0.06, 2.10, 2.50, -4.46, 3.00, -2.70, C.peg);
@@ -1063,9 +1114,9 @@ function buildRoom(){
           C.leaf, [Math.cos(a)*0.42, a, Math.sin(a)*0.42]);
   }
 
-  b.box(0.50, 0.08, 0.36, -3.50, 0.045, -0.60, C.bookA);
-  b.box(0.48, 0.07, 0.34, -3.48, 0.120, -0.58, C.bookB, 0.14);
-  b.box(0.46, 0.09, 0.33, -3.52, 0.200, -0.62, C.bookC, -0.09);
+  b.box(0.50, 0.08, 0.36, 2.70, 0.045, 1.35, C.bookA, 0.22);
+  b.box(0.48, 0.07, 0.34, 2.72, 0.120, 1.37, C.bookB, 0.36);
+  b.box(0.46, 0.09, 0.33, 2.68, 0.200, 1.33, C.bookC, 0.13);
 
   b.box(0.52, 0.06, 0.15, -1.20, 0.035, -4.22, 0x1f232c);
   b.box(0.04, 0.02, 0.03, -1.38, 0.07, -4.16, 0x7fe0b8, 0, { glow: GLOW.mint, glowI: 0.5 });
@@ -1142,6 +1193,16 @@ var UI = (function(){
     }
 
     if (d.facts) h += '<div class="p-block"><h3>By the numbers</h3>' + rows(d.facts) + '</div>';
+
+    if (d.races){
+      h += '<div class="p-block"><h3>Race results</h3><ul class="p-races">';
+      for (i = 0; i < d.races.length; i++){
+        h += '<li><span class="ev">' + esc(d.races[i][0]) + '</span>' +
+             '<span class="di">' + esc(d.races[i][1]) + '</span>' +
+             '<span class="ti">' + esc(d.races[i][2]) + '</span></li>';
+      }
+      h += '</ul></div>';
+    }
 
     if (d.links){
       h += '<div class="p-links">';
@@ -1271,6 +1332,20 @@ var UI = (function(){
 
     h += '<h2>Education</h2><h3>' + esc(CONTENT.education.title) + '</h3>';
     h += '<p class="meta">' + esc(CONTENT.education.sub) + '</p>';
+
+    var sp = CONTENT.sports;
+    h += '<h2>Endurance Sports</h2>';
+    h += '<p>' + esc(sp.blocks[0].p) + '</p>';
+    h += '<h4>Gear</h4><dl>';
+    for (i = 0; i < sp.groups.length; i++){
+      h += '<div><dt>' + esc(sp.groups[i].h) + '</dt><dd>' + esc(sp.groups[i].v) + '</dd></div>';
+    }
+    h += '</dl><h4>Race results</h4><dl>';
+    for (i = 0; i < sp.races.length; i++){
+      h += '<div><dt>' + esc(sp.races[i][1]) + '</dt><dd>' + esc(sp.races[i][0]) +
+           ' &nbsp;&middot;&nbsp; ' + esc(sp.races[i][2]) + '</dd></div>';
+    }
+    h += '</dl>';
 
     h += '<h2>Contact</h2><dl>';
     for (i = 0; i < CONTENT.contact.links.length; i++){
@@ -1471,7 +1546,9 @@ if (!LOW && !REDUCED){
     [1.45, 1.541, -3.30, 1.25], [0.00, 1.541, -4.02, 1.50], [-1.95, 1.541, -3.94, 1.05],
     [-1.30, 1.541, -3.02, 0.90], [0.95, 1.541, -2.98, 0.85], [-2.55, 1.541, -3.05, 0.42],
     [2.55, 1.541, -4.05, 0.62], [-2.50, 0.012, -1.75, 1.60], [3.55, 0.012, -1.20, 0.90],
-    [-3.50, 0.012, -0.60, 0.80], [2.25, 0.012, -3.85, 0.95]
+    [2.70, 0.012, 1.35, 0.80], [2.25, 0.012, -3.85, 0.95],
+    [-4.14, 0.012, -0.40, 0.92], [-4.14, 0.012, 1.60, 0.92],
+    [-3.28, 0.012, 2.05, 0.60], [-2.98, 0.012, 1.86, 0.60]
   ];
   var pos = [], uv = [], q = [[-1,-1,0,0],[1,-1,1,0],[1,1,1,1],[-1,-1,0,0],[1,1,1,1],[-1,1,0,1]];
   for (var i = 0; i < blobs.length; i++){
@@ -1638,6 +1715,96 @@ spot('skills', 'AI/ML Systems', [76, 78, 1.55], function(b, x){
   b.box(0.016, 0.10, 0.02, -4.350, 3.00, -1.98, 0xb08a3a);
   x.push(ledMesh(0x6fd6f2, [[-4.348, 2.93, -1.97, 0.026]]));
 }, 'ai');
+
+/* ------------------------------------------------------------
+   THE GEAR CORNER
+   The bike is authored side-on in local coordinates (long axis Z,
+   frame in the YZ plane) and placed once with a lean into the wall,
+   which is what setBase exists for. Everything else sits around it.
+   ------------------------------------------------------------ */
+
+var BIKE = { x: -4.05, z: 0.60, lean: 0.14 };
+var FRAME = 0x1b1e25, RUBBER = 0x121417, ALLOY = 0x8b93a2, DECAL = 0xc9d2e0;
+
+/* a round tube between two points in the local YZ plane */
+function tube(b, ay, az, by, bz, r, col){
+  var dy = by - ay, dz = bz - az;
+  var L = Math.sqrt(dy*dy + dz*dz);
+  b.cyl(r, r, L, 6, 0, (ay+by)/2, (az+bz)/2, col, [Math.atan2(dz, dy), 0, 0]);
+}
+
+function wheel(b, cz, col){
+  b.push(gTorus(0.595, 0.045, 5, 18), xf(0, 0.64, cz, 0, Math.PI/2, 0), col);
+  b.push(gTorus(0.530, 0.022, 4, 16), xf(0, 0.64, cz, 0, Math.PI/2, 0), ALLOY);
+  b.cyl(0.05, 0.05, 0.11, 6, 0, 0.64, cz, ALLOY, [0, 0, Math.PI/2]);
+  for (var s = 0; s < 6; s++){
+    var a = s * Math.PI / 6;
+    b.box(0.012, 0.012, 1.10, 0, 0.64, cz, ALLOY, [a, 0, 0]);
+  }
+}
+
+spot('sports', 'Cycling', [64, 74, 6.40], function(b){
+  b.setBase(xf(BIKE.x, 0, BIKE.z, 0, 0, BIKE.lean));
+
+  wheel(b, -1.00, RUBBER);
+  wheel(b,  1.00, RUBBER);
+
+  tube(b, 0.42,  0.00, 1.16,  0.78, 0.045, FRAME);   /* down tube  */
+  tube(b, 0.42,  0.00, 1.30, -0.26, 0.042, FRAME);   /* seat tube  */
+  tube(b, 1.26, -0.22, 1.32,  0.72, 0.040, FRAME);   /* top tube   */
+  tube(b, 0.42,  0.00, 0.64, -1.00, 0.032, FRAME);   /* chain stay */
+  tube(b, 1.24, -0.26, 0.64, -1.00, 0.028, FRAME);   /* seat stay  */
+  tube(b, 1.20,  0.80, 0.64,  1.00, 0.034, FRAME);   /* fork       */
+  tube(b, 1.14,  0.76, 1.38,  0.70, 0.034, FRAME);   /* head tube  */
+
+  b.box(0.030, 0.020, 0.42, 0, 1.12, 0.40, DECAL);   /* down tube decal */
+
+  tube(b, 1.30, -0.26, 1.46, -0.30, 0.028, ALLOY);   /* seatpost */
+  b.box(0.11, 0.05, 0.36, 0, 1.50, -0.31, 0x15181e); /* saddle   */
+
+  b.box(0.46, 0.042, 0.042, 0, 1.42, 0.68, FRAME);   /* bars     */
+  b.box(0.042, 0.20, 0.042, -0.21, 1.33, 0.70, FRAME, [0.5, 0, 0]);
+  b.box(0.042, 0.20, 0.042,  0.21, 1.33, 0.70, FRAME, [0.5, 0, 0]);
+  b.cyl(0.026, 0.026, 0.20, 6, 0, 1.40, 0.74, ALLOY, [0, 0, Math.PI/2]);
+
+  b.cyl(0.20, 0.20, 0.014, 12, 0, 0.42, 0.05, ALLOY, [0, 0, Math.PI/2]);
+  b.box(0.030, 0.30, 0.036, 0.07, 0.34, 0.00, ALLOY, [-0.5, 0, 0]);
+  b.box(0.030, 0.30, 0.036, -0.07, 0.50, 0.00, ALLOY, [-0.5, 0, 0]);
+  b.box(0.10, 0.022, 0.16, 0.10, 0.20, -0.14, 0x15181e);
+  b.box(0.10, 0.022, 0.16, -0.10, 0.64, 0.14, 0x15181e);
+
+  b.cyl(0.055, 0.075, 0.30, 8, 0.05, 0.86, -0.10, 0x9aa3b2, [0.22, 0, 0]);
+}, 'cycling');
+
+spot('sports', 'Running', [58, 56, 2.05], function(b){
+  /* a pair of EVO SLs kicked off by the bike, not squared up */
+  var shoe = function(sx, sz, ry){
+    b.box(0.26, 0.055, 0.66, sx, 0.030, sz, 0x101216, ry);
+    b.box(0.24, 0.11, 0.62, sx, 0.095, sz, 0x1b1e25, ry);
+    b.box(0.22, 0.13, 0.26, sx, 0.150, sz - 0.14, 0x1b1e25, ry);
+    b.box(0.20, 0.035, 0.20, sx, 0.205, sz - 0.18, 0x2a2f3a, ry);
+    b.box(0.255, 0.022, 0.20, sx, 0.042, sz + 0.20, DECAL, ry);
+  };
+  shoe(-3.28, 2.05,  0.34);
+  shoe(-2.98, 1.86, -0.18);
+}, 'running');
+
+spot('sports', 'Race results', [70, 74, 1.50], function(b, x){
+  /* three medals on a wall hook, one per race */
+  b.box(0.05, 0.05, 0.42, -4.455, 2.92, 1.90, 0x3b4150);
+  b.cyl(0.022, 0.022, 0.10, 6, -4.41, 2.90, 1.90, ALLOY, [0, 0, Math.PI/2]);
+
+  var medal = function(mz, drop, face, ribbon){
+    b.box(0.014, drop, 0.11, -4.415, 2.90 - drop/2, mz, ribbon);
+    b.cyl(0.115, 0.115, 0.022, 12, -4.412, 2.90 - drop - 0.10, mz, face, [0, 0, Math.PI/2]);
+    b.cyl(0.075, 0.075, 0.026, 10, -4.406, 2.90 - drop - 0.10, mz, 0x6e5a2a, [0, 0, Math.PI/2]);
+  };
+  medal(1.74, 0.26, 0xc9a227, 0x8a3a30);
+  medal(1.90, 0.34, 0xb8b8c0, 0x2e5c70);
+  medal(2.06, 0.22, 0xc07a3a, 0x3f6b4a);
+
+  x.push(ledMesh(0xffb45c, [[-4.40, 2.90, 1.62, 0.026]]));
+}, 'races');
 
 /* --- education --- */
 spot('education', 'Education', [26, 76, 1.80], function(b, x){

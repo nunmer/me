@@ -35,6 +35,7 @@ The goal: the site feels like a place, not a document. A visitor "walks in," loo
 | Skills | Tool wall / pegboard, or bookshelf with labeled spines | Grouped by category (Languages, Backend & Infra, Data Engineering, AI/ML) |
 | Education | Small framed diploma | Background detail, not a focal point — understated placement |
 | Contact | Phone or mail tray object on the desk | Click opens a simple panel with email/GitHub/LinkedIn links |
+| Endurance Sports | Gear corner — a propped bike (S-Works SL9), a pair of running shoes (EVO SL) by the door, a small medal/trophy hook | A lighter, personal counterpoint to the desk/work objects; medals hang as physical objects, one per race result |
 
 ---
 

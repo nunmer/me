@@ -4,7 +4,7 @@ A personal site built as a single isometric 3D room. You orbit it and click the
 objects on the desk instead of scrolling a page. Every section of a normal
 portfolio lives as something physical: the monitors are the jobs, the shelf is
 the side projects, the pegboard is the skills, the mail tray is the contact
-details.
+details, and the gear corner is the endurance sports.
 
 One self-contained `index.html`. Three.js r128 from a CDN is the only
 dependency. No build step, no framework, no bundler.
