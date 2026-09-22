@@ -1713,7 +1713,7 @@ function ledMesh(hex, pts){
 var DEG = Math.PI / 180;
 var SPOTS = [], SPOTBY = {}, PICK = [];
 
-function spot(id, label, view, build, hl){
+function spot(id, label, view, build, hl, opt){
   var g = new THREE.Group(), extras = [], i;
   var b = new Builder();
   build(b, extras);
@@ -1723,6 +1723,10 @@ function spot(id, label, view, build, hl){
   var bb = new THREE.Box3().setFromObject(g);
   var c = new THREE.Vector3();
   bb.getCenter(c);
+  /* A group spread from the floor to head height frames badly on its own
+     bounding box: the centre lands between the things you came to look
+     at. opt.center names the subject instead. */
+  if (opt && opt.center) c.set(opt.center[0], opt.center[1], opt.center[2]);
 
   var s = {
     id: id, label: label, hl: hl || null, group: g, center: c,
@@ -1744,6 +1748,21 @@ function spot(id, label, view, build, hl){
 
 /* ---- the static room: one mesh, one draw call ---- */
 scene.add(new THREE.Mesh(buildRoom(), bakedMat()));
+
+/* The first and only lights in this scene, and they reach exactly one
+   object: the bike model, which is the one thing here not carrying its
+   lighting in its vertex colours. Ambient reproduces the room's level,
+   the key and fill add the specular that makes carbon read as carbon.
+   Every other mesh is MeshBasicMaterial and ignores them entirely. */
+if (!LOW){
+  scene.add(new THREE.AmbientLight(0xffffff, 1.00));
+  var keyL = new THREE.DirectionalLight(0xffe8cc, 0.42);
+  keyL.position.set(3.4, 6.2, 2.6);
+  scene.add(keyL);
+  var fillL = new THREE.DirectionalLight(0xbcd2ff, 0.26);
+  fillL.position.set(-5.0, 3.6, 5.2);
+  scene.add(fillL);
+}
 
 /* ---- atmosphere ---- */
 var glowTex = radialTex('rgba(255,214,166,0.95)', 'rgba(255,170,90,0.30)', 64);
@@ -1981,6 +2000,82 @@ spot('skills', 'AI/ML Systems', [76, 78, 1.55], function(b, x){
 }, 'ai');
 
 /* ------------------------------------------------------------
+   THE BIKE MODEL
+   The only asset this page fetches. Everything else in the room is
+   generated at run time, and that works for a desk, a chair, a pair of
+   shoes. It does not work for a bicycle: the shape is almost entirely
+   thin members and negative space, the eye knows it far too well to
+   accept an approximation, and every generated version of it read as a
+   toy.
+
+   So the bike is a real mesh, and the generated one stays behind it as
+   the fallback. The model is asked for only once the room is already on
+   screen and interactive, only on the full tier, and only if it is
+   actually there: the loader script is not even requested otherwise,
+   and a failure anywhere along the way leaves the generated bike
+   exactly where it is. Nothing waits for it.
+
+   Its own materials are dropped on arrival. This room is lit once into
+   vertex colours and rendered flat, so a PBR pipeline would match
+   nothing around it. Each part keeps the base colour its material asked
+   for and joins the room's lighting instead.
+   ------------------------------------------------------------ */
+
+var MODEL = {
+  url: 'bike.glb',
+  loader: 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js',
+  len: 3.34,        /* the model is scaled until it is this long     */
+  turn: 0,          /* turned until the drive side faces the room    */
+  lean: 0.02
+};
+
+function loadBike(fallback){
+  if (LOW || REDUCED) return;
+  fetch(MODEL.url, { method: 'HEAD' }).then(function(r){
+    if (!r.ok) return;
+    var sc = document.createElement('script');
+    sc.src = MODEL.loader;
+    sc.onload = function(){
+      if (!THREE.GLTFLoader) return;
+      new THREE.GLTFLoader().load(MODEL.url, function(gltf){
+        fitBike(gltf.scene, fallback);
+      }, null, function(){});
+    };
+    document.head.appendChild(sc);
+  })['catch'](function(){});
+}
+
+function fitBike(root, fallback){
+  /* fitted to the model's own bounds rather than to numbers copied out
+     of it, so a different bike drops in without a value changing here */
+  var bx = new THREE.Box3().setFromObject(root), sz = new THREE.Vector3();
+  bx.getSize(sz);
+  root.scale.setScalar(MODEL.len / Math.max(sz.x, sz.z));
+  root.rotation.set(0, MODEL.turn, MODEL.lean, 'YXZ');
+  root.updateMatrixWorld(true);
+  bx.setFromObject(root);
+  var c = new THREE.Vector3(); bx.getCenter(c);
+  root.position.set(BIKE.x - c.x, BIKE.y - bx.min.y, BIKE.z - c.z);
+
+  var sp = fallback.userData.spot;
+  root.traverse(function(o){
+    if (!o.isMesh) return;
+    var src = o.material;
+    var col = src && src.color ? src.color.clone() : new THREE.Color(0x262b33);
+    col.multiplyScalar(0.40);
+    o.material = new THREE.MeshPhongMaterial({
+      color: col, shininess: 28, specular: 0x5f6a79
+    });
+    o.userData.spot = sp;
+    if (sp) sp.mats.push({ m: o.material, c: o.material.color.clone() });
+  });
+
+  fallback.visible = false;
+  fallback.parent.add(root);
+  need = true;
+}
+
+/* ------------------------------------------------------------
    THE GEAR CORNER
    The bike hangs off the left wall on two rim hooks, which is where
    a road bike actually lives in a flat and which clears the floor
@@ -2045,8 +2140,12 @@ function wheel(b, cz, rear){
 
 /* the wall hook each rim hangs in: plate, arm, and a rubber-sleeved U
    the tyre crown sits inside */
+/* The hooks are placed off proportions that hold for any road bike
+   rather than off this particular model: the hubs sit 29.3% of the
+   overall length either side of centre and the tyre crown 41.6% of it
+   above the ground. Swap the model and they still meet the wheels. */
 function rimHook(b, wz){
-  var top = BIKE.y + 1.28;
+  var top = BIKE.y + MODEL.len * 0.385;
   b.box(0.035, 0.34, 0.150, -4.452, top + 0.30,  wz - 0.12, C.metal);
   b.box(0.300, 0.062, 0.082, -4.300, top + 0.335, wz - 0.12, C.metal);
   b.box(0.064, 0.300, 0.082, -4.152, top + 0.190, wz - 0.12, 0x2c313a);
@@ -2081,11 +2180,16 @@ function cycShoe(b, x, sx, sz, ry, tipped){
   b.setBase(null);
 }
 
-spot('sports', 'Cycling', [66, 80, 7.80], function(b, x){
-  rimHook(b, BIKE.z - 1.00);
-  rimHook(b, BIKE.z + 1.00);
+spot('sports', 'Cycling', [66, 82, 7.20], function(b, x){
+  rimHook(b, BIKE.z - MODEL.len * 0.293);
+  rimHook(b, BIKE.z + MODEL.len * 0.293);
 
+  /* The generated bike goes into a mesh of its own rather than into the
+     spot's merged one, because the real model replaces it the moment it
+     arrives and the hooks, helmet, shoes and pump have to stay put. */
+  var bb = new Builder(), b0 = b;
   var baseM = xf(BIKE.x, BIKE.y, BIKE.z, 0, 0, BIKE.lean);
+  b = bb;
   b.setBase(baseM);
 
   wheel(b, -1.00, true);
@@ -2191,8 +2295,14 @@ spot('sports', 'Cycling', [66, 80, 7.80], function(b, x){
                 0.30, 0.052, 0.008, 0.130, -1.000, 0, Math.PI/2, 0));
   rig.add(decal(texWord('ROVAL', 128, 32, '#7d8796', 18, false, 2),
                 0.30, 0.052, 0.008, 0.130,  1.000, 0, Math.PI/2, 0));
-  x.push(rig);
   b.setBase(null);
+  b = b0;
+
+  var procBike = new THREE.Object3D();
+  procBike.add(new THREE.Mesh(bb.build(), bakedMat()));
+  procBike.add(rig);
+  x.push(procBike);
+  loadBike(procBike);
 
   /* S-Works Evade aero helmet on the first peg */
   var hz = GEAR.peg.helmet;
@@ -2221,7 +2331,7 @@ spot('sports', 'Cycling', [66, 80, 7.80], function(b, x){
   x.push(screenMesh(texGauge(), 0.150, 0.150, -4.188, 0.300, 0.78, 0, Math.PI/2, 0, 0.004));
   b.box(0.026, 0.026, 0.300, -4.230, 0.210, 0.93, 0x16191f, [0.40, 0, 0]);
   b.box(0.026, 0.240, 0.026, -4.215, 0.330, 1.06, 0x16191f, [0.55, 0, 0]);
-}, 'cycling');
+}, 'cycling', { center: [-4.14, 3.30, 2.50] });
 
 spot('sports', 'Running', [58, 60, 2.75], function(b, x){
   /* A pair of Adizero EVO SLs kicked off under the bike, not squared up.
@@ -2379,7 +2489,7 @@ spot('sports', 'Swimming', [64, 80, 4.10], function(b, x){
   b.box(0.022, 0.022, 0.150, -3.630, 0.078, 2.69, 0x9aa3b2);
 }, 'swimming');
 
-spot('sports', 'Race results', [68, 80, 4.60], function(b, x){
+spot('sports', 'Race results', [64, 78, 4.40], function(b, x){
   /* medals on the rail, race bibs still pinned above the bike */
   var medal = function(mz, drop, face, ribbon){
     b.box(0.016, drop, 0.115, -4.312, 2.000 - drop/2, mz, ribbon);
@@ -2390,14 +2500,16 @@ spot('sports', 'Race results', [68, 80, 4.60], function(b, x){
   medal(GEAR.peg.medal,        0.40, 0xb8b8c0, 0x2e5c70);
   medal(GEAR.peg.medal + 0.17, 0.22, 0xc07a3a, 0x3f6b4a);
 
-  var bib = function(bz, tilt, t){
-    b.box(0.016, 0.300, 0.360, -4.442, 3.980, bz, 0xe6e2d6, [tilt, 0, 0]);
-    x.push(screenMesh(t, 0.350, 0.290, -4.434, 3.980, bz, 0, Math.PI/2, tilt, 0.004));
-    b.box(0.022, 0.030, 0.030, -4.426, 4.088, bz - 0.130, 0x9aa3b2, [tilt, 0, 0]);
-    b.box(0.022, 0.030, 0.030, -4.426, 4.088, bz + 0.130, 0x9aa3b2, [tilt, 0, 0]);
+  /* on the corkboard, where race numbers actually end up, and where
+     they are not sharing wall with the bike */
+  var bib = function(by, bz, tilt, t){
+    b.box(0.014, 0.300, 0.360, -4.400, by, bz, 0xe6e2d6, [tilt, 0, 0]);
+    x.push(screenMesh(t, 0.350, 0.290, -4.393, by, bz, 0, Math.PI/2, tilt, 0.008));
+    b.box(0.020, 0.028, 0.028, -4.386, by + 0.108, bz - 0.130, 0x9aa3b2, [tilt, 0, 0]);
+    b.box(0.020, 0.028, 0.028, -4.386, by + 0.108, bz + 0.130, 0x9aa3b2, [tilt, 0, 0]);
   };
-  bib(1.00, 0.055, texBib('ALMATY MARATHON', '1042', '21.1 KM', '#8a3a30'));
-  bib(1.58, -0.045, texBib('ASTANA HALF', '388', '21.1 KM', '#2e5c70'));
+  bib(2.380, -0.880, 0.055, texBib('ALMATY MARATHON', '1042', '21.1 KM', '#8a3a30'));
+  bib(3.280, 0.300, -0.045, texBib('ASTANA HALF', '388', '21.1 KM', '#2e5c70'));
 
   x.push(ledMesh(0xffb45c, [[-4.362, 2.086, GEAR.railZ0 + 0.10, 0.026]]));
 }, 'races');

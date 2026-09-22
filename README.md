@@ -47,8 +47,24 @@ Without WebGL, the same content renders as a typeset reading version.
 ## Layout
 
 - `index.html` — the whole site
+- `bike.glb` — the one asset, see credits below
 - `CONTENT.md` — the copy, written before the build
 - `DESIGN.md` — the spatial concept and build sequence
 
 Content is a plain JS object keyed by object id, so editing the writing never
 means touching the geometry code.
+
+## Credits
+
+Everything in the room is generated at run time except the bike. A bicycle is
+almost entirely thin members and negative space, which is the one thing
+primitives cannot fake, so that object is a real mesh. It is loaded after the
+room is already interactive, only on the full tier, and a generated bike stands
+in if it never arrives.
+
+This work is based on "Custom Full Carbon Fibre Road Bike"
+(https://sketchfab.com/3d-models/custom-full-carbon-fibre-road-bike-9a2a8748b33e48b884437906482f1e90)
+by rhcreations (https://sketchfab.com/rhcreations) licensed under CC-BY-4.0
+(http://creativecommons.org/licenses/by/4.0/). Stripped to positions, normals,
+indices and one flat colour per part, because this room carries its lighting in
+vertex colours and has no use for a PBR pipeline.
