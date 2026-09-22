@@ -2,3 +2,6 @@
 Thumbs.db
 node_modules/
 .vercel
+
+# reference photos, not mine to redistribute
+*.webp
