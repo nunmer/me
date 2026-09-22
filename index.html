@@ -641,7 +641,13 @@ var LIGHTS = [
   { p:[1.20, 0.45, 1.60], c:[0.62, 0.48, 0.36], i:1.1, a:0.40, b:0.22 },
   /* cool daylight spilling in across the open front-left, which is what
      makes the gear corner readable so far from the desk lamp */
-  { p:[-2.90, 2.00, 3.10], c:[0.68, 0.76, 0.94], i:1.9, a:0.46, b:0.34 }
+  { p:[-2.90, 2.00, 3.10], c:[0.68, 0.76, 0.94], i:1.9, a:0.46, b:0.34 },
+  /* picture light over the hung bike. Without it the gear corner is a
+     silhouette and the left half of the room stops being worth orbiting to */
+  { p:[-4.08, 4.48, 2.50], c:[0.98, 0.86, 0.70], i:3.0, a:0.44, b:0.28 },
+  /* strip under the gear rail. The picture light above the bike leaves
+     everything hanging below it in shadow, and this is the fill */
+  { p:[-4.22, 1.96, 2.40], c:[1.00, 0.85, 0.66], i:1.7, a:0.52, b:0.42 }
 ];
 
 var SKY = [0.150, 0.190, 0.285];   // cool ambient from above
@@ -714,20 +720,62 @@ function hex2rgb(h){
    ships 6 floats instead of 9.
    ------------------------------------------------------------ */
 
+/* Curve and texture resolution, set once by the 3D layer as soon as it
+   knows what machine it is on: 1 on the low tier, 2 everywhere else.
+   Both are bake-time costs. A doubled segment count is paid once, into
+   a merged buffer, and costs nothing per frame afterwards, so the round
+   things can stop being faceted without touching the budget that
+   actually matters. */
+var QUAL = 1;
+
 var _geoCache = {};
 function gBox(w, h, d){
   var k = 'b' + w + '_' + h + '_' + d;
   if (!_geoCache[k]) _geoCache[k] = new THREE.BoxGeometry(w, h, d);
   return _geoCache[k];
 }
+/* A box with its edges rolled off. Every edge in this room used to end
+   in a perfectly sharp corner, which is the single thing that makes a
+   box-built scene read as blocks rather than objects: a real edge always
+   catches a highlight. Each face is subdivided once and its border
+   vertices are projected onto the rounded shell, so neighbouring faces
+   land on exactly the same points and no seam opens up. Smooth normals
+   across that border give the rolloff. Four times the triangles of a
+   plain box, all of it paid once into the merged buffer. */
+function gCBox(w, h, d){
+  var k = 'x' + w + '_' + h + '_' + d;
+  if (_geoCache[k]) return _geoCache[k];
+  var r = Math.min(w, h, d) * 0.20;
+  if (r > 0.026) r = 0.026;
+  if (r < 0.0016) return (_geoCache[k] = gBox(w, h, d));
+
+  var g = new THREE.BoxGeometry(w, h, d, 2, 2, 2);
+  var p = g.attributes.position, i, vx, vy, vz, cx, cy, cz, dx, dy, dz, L;
+  var hx = w/2 - r, hy = h/2 - r, hz = d/2 - r;
+  for (i = 0; i < p.count; i++){
+    vx = p.getX(i); vy = p.getY(i); vz = p.getZ(i);
+    cx = vx < -hx ? -hx : (vx > hx ? hx : vx);
+    cy = vy < -hy ? -hy : (vy > hy ? hy : vy);
+    cz = vz < -hz ? -hz : (vz > hz ? hz : vz);
+    dx = vx - cx; dy = vy - cy; dz = vz - cz;
+    L = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    if (L > 1e-9){ dx = dx / L * r; dy = dy / L * r; dz = dz / L * r; }
+    p.setXYZ(i, cx + dx, cy + dy, cz + dz);
+  }
+  g.computeVertexNormals();
+  return (_geoCache[k] = g);
+}
+
 function gCyl(rt, rb, h, seg, open){
+  seg = Math.round((seg || 10) * QUAL);
   var k = 'c' + rt + '_' + rb + '_' + h + '_' + seg + '_' + (open ? 1 : 0);
-  if (!_geoCache[k]) _geoCache[k] = new THREE.CylinderGeometry(rt, rb, h, seg || 10, 1, !!open);
+  if (!_geoCache[k]) _geoCache[k] = new THREE.CylinderGeometry(rt, rb, h, seg, 1, !!open);
   return _geoCache[k];
 }
 function gSphere(r, seg){
+  seg = Math.round((seg || 8) * QUAL);
   var k = 's' + r + '_' + seg;
-  if (!_geoCache[k]) _geoCache[k] = new THREE.SphereGeometry(r, seg || 8, (seg || 8) >> 1);
+  if (!_geoCache[k]) _geoCache[k] = new THREE.SphereGeometry(r, seg, Math.max(3, seg >> 1));
   return _geoCache[k];
 }
 function gPlane(w, h){
@@ -736,13 +784,15 @@ function gPlane(w, h){
   return _geoCache[k];
 }
 function gTorus(r, t, rs, ts){
+  rs = Math.round((rs || 5) * QUAL); ts = Math.round((ts || 16) * QUAL);
   var k = 't' + r + '_' + t + '_' + rs + '_' + ts;
-  if (!_geoCache[k]) _geoCache[k] = new THREE.TorusGeometry(r, t, rs || 5, ts || 16);
+  if (!_geoCache[k]) _geoCache[k] = new THREE.TorusGeometry(r, t, rs, ts);
   return _geoCache[k];
 }
 function gRing(ri, ro, seg){
+  seg = Math.round((seg || 20) * QUAL);
   var k = 'r' + ri + '_' + ro + '_' + seg;
-  if (!_geoCache[k]) _geoCache[k] = new THREE.RingGeometry(ri, ro, seg || 20);
+  if (!_geoCache[k]) _geoCache[k] = new THREE.RingGeometry(ri, ro, seg);
   return _geoCache[k];
 }
 
@@ -754,6 +804,16 @@ function xf(x, y, z, rx, ry, rz){
   _q.setFromEuler(_e);
   _p.set(x, y, z);
   return new THREE.Matrix4().compose(_p, _q, _s);
+}
+
+/* the same with a scale, so one sphere can become a helmet shell, a
+   goggle lens or a pull buoy. applyMatrix4 fixes the normals for us. */
+function xfs(x, y, z, rx, ry, rz, sx, sy, sz){
+  _e.set(rx||0, ry||0, rz||0, 'YXZ');
+  _q.setFromEuler(_e);
+  _p.set(x, y, z);
+  return new THREE.Matrix4().compose(_p, _q,
+    new THREE.Vector3(sx, sy === undefined ? sx : sy, sz === undefined ? sx : sz));
 }
 
 function Builder(){ this.pos = []; this.col = []; this.baseM = null; }
@@ -786,7 +846,8 @@ Builder.prototype.push = function(geo, mat, colorHex, opt){
 /* box(w,h,d, x,y,z, colour, [rotY | [rx,ry,rz]], opt) */
 Builder.prototype.box = function(w, h, d, x, y, z, col, rot, opt){
   var r = typeof rot === 'number' ? [0, rot, 0] : (rot || [0,0,0]);
-  return this.push(gBox(w, h, d), xf(x, y, z, r[0], r[1], r[2]), col, opt);
+  var g = QUAL > 1 ? gCBox(w, h, d) : gBox(w, h, d);
+  return this.push(g, xf(x, y, z, r[0], r[1], r[2]), col, opt);
 };
 Builder.prototype.cyl = function(rt, rb, h, seg, x, y, z, col, rot, opt){
   var r = typeof rot === 'number' ? [0, rot, 0] : (rot || [0,0,0]);
@@ -819,9 +880,14 @@ function bakedMat(){
    requests, no atlas, nothing over 256px, mipmaps off.
    ============================================================ */
 
+/* Canvases are authored in logical pixels and rasterised at QUAL times
+   that, so every wordmark and screen stays crisp when the camera comes
+   in close, without a single call site changing its coordinates. */
 function cv(w, h){
   var c = document.createElement('canvas');
-  c.width = w; c.height = h;
+  c.width = Math.round(w * QUAL);
+  c.height = Math.round(h * QUAL);
+  if (QUAL !== 1) c.getContext('2d').setTransform(QUAL, 0, 0, QUAL, 0, 0);
   return c;
 }
 function tex(canvas, opt){
@@ -836,13 +902,13 @@ function tex(canvas, opt){
 
 /* soft radial dot, reused for dust motes, bulb bloom and contact shadows */
 function radialTex(inner, outer, size){
-  var c = cv(size || 64, size || 64), x = c.getContext('2d'), r = c.width / 2;
+  var n = size || 64, c = cv(n, n), x = c.getContext('2d'), r = n / 2;
   var g = x.createRadialGradient(r, r, 0, r, r, r);
   g.addColorStop(0, inner);
   g.addColorStop(0.45, outer);
   g.addColorStop(1, 'rgba(0,0,0,0)');
   x.fillStyle = g;
-  x.fillRect(0, 0, c.width, c.height);
+  x.fillRect(0, 0, n, n);
   return tex(c);
 }
 
@@ -1028,6 +1094,71 @@ function texSLogo(){
   return tex(c);
 }
 
+/* three small readable faces. Each one says what its object is without
+   needing a wordmark: a bike computer, a race bib, a pressure gauge. */
+function texHeadUnit(){
+  var c = cv(64, 80), x = c.getContext('2d');
+  x.fillStyle = '#0d1116'; x.fillRect(0, 0, 64, 80);
+  x.fillStyle = '#1a222c'; x.fillRect(3, 3, 58, 74);
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#ffb45c';
+  x.font = 'bold 21px Arial, Helvetica, sans-serif';
+  x.fillText('32.4', 32, 22);
+  x.fillStyle = 'rgba(190,206,224,0.55)';
+  x.font = 'bold 8px Arial, Helvetica, sans-serif';
+  x.fillText('KM/H', 32, 37);
+  x.fillStyle = '#6fd6f2';
+  x.font = 'bold 15px Arial, Helvetica, sans-serif';
+  x.fillText('284w', 32, 53);
+  x.fillStyle = 'rgba(120,140,164,0.45)';
+  x.fillRect(9, 62, 46, 2);
+  x.fillStyle = 'rgba(190,206,224,0.45)';
+  x.font = 'bold 8px Arial, Helvetica, sans-serif';
+  x.fillText('61.8 KM', 32, 71);
+  return tex(c);
+}
+
+function texGauge(){
+  var c = cv(64, 64), x = c.getContext('2d'), i, a;
+  x.fillStyle = '#22262e'; x.fillRect(0, 0, 64, 64);
+  x.fillStyle = '#e8e4d6';
+  x.beginPath(); x.arc(32, 32, 27, 0, 6.2832); x.fill();
+  x.strokeStyle = 'rgba(30,28,24,0.50)'; x.lineWidth = 1.5;
+  for (i = 0; i < 12; i++){
+    a = -2.36 + i * (4.71 / 11);
+    x.beginPath();
+    x.moveTo(32 + Math.cos(a)*19, 32 + Math.sin(a)*19);
+    x.lineTo(32 + Math.cos(a)*24, 32 + Math.sin(a)*24);
+    x.stroke();
+  }
+  x.strokeStyle = '#a8332a'; x.lineWidth = 2.5;
+  x.beginPath(); x.moveTo(32, 32);
+  x.lineTo(32 + Math.cos(-0.95)*18, 32 + Math.sin(-0.95)*18); x.stroke();
+  x.fillStyle = '#2a2822';
+  x.beginPath(); x.arc(32, 32, 3, 0, 6.2832); x.fill();
+  return tex(c);
+}
+
+function texBib(title, num, sub, tint){
+  var c = cv(128, 108), x = c.getContext('2d');
+  x.fillStyle = '#efece0'; x.fillRect(0, 0, 128, 108);
+  x.fillStyle = tint; x.fillRect(0, 0, 128, 22);
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#f6f4ec';
+  x.font = 'bold 11px Arial, Helvetica, sans-serif';
+  x.fillText(title, 64, 12);
+  x.fillStyle = '#1d1b17';
+  x.font = 'bold 48px Arial, Helvetica, sans-serif';
+  x.fillText(num, 64, 58);
+  x.fillStyle = 'rgba(29,27,23,0.50)';
+  x.font = 'bold 11px Arial, Helvetica, sans-serif';
+  x.fillText(sub, 64, 92);
+  x.fillStyle = 'rgba(0,0,0,0.30)';
+  x.beginPath(); x.arc(14, 34, 3.2, 0, 6.2832); x.fill();
+  x.beginPath(); x.arc(114, 34, 3.2, 0, 6.2832); x.fill();
+  return tex(c);
+}
+
 function decal(t, w, h, x, y, z, rx, ry, rz){
   var m = new THREE.Mesh(gPlane(w, h), new THREE.MeshBasicMaterial({
     map: t, transparent: true, depthWrite: false
@@ -1074,6 +1205,15 @@ var C = {
 var GLOW = {
   amber:[1.00,0.66,0.32], warm:[1.00,0.84,0.62],
   cyan:[0.36,0.78,0.98], mint:[0.44,0.92,0.74], red:[0.95,0.34,0.30]
+};
+
+/* The gear corner's shared layout. The rail and its pegs are furniture,
+   so the room builds them; everything that hangs off them is built by the
+   hotspots further down, and the two have to agree about where they are. */
+var GEAR = {
+  railX: -4.415, railY: 2.10, railZ0: 0.90, railZ1: 4.05,
+  peg: { medal: 1.20, helmet: 1.70, goggles: 2.08, cap: 2.34, suit: 2.62,
+         wet: 3.18, towel: 3.80 }
 };
 
 function buildRoom(){
@@ -1196,6 +1336,30 @@ function buildRoom(){
   b.box(0.035, 0.52, 0.035, 0.62, 1.14, -4.26, C.cable, [0, 0, 0.16]);
   b.box(0.035, 0.52, 0.035, 0.74, 0.66, -4.30, C.cable, [0, 0, 0.44]);
   b.box(0.035, 0.40, 0.035, 0.99, 0.28, -4.32, C.cable, [0, 0, 1.02]);
+
+  /* ---- gear corner: the rail everything hangs off, and the picture
+     light over the bike that stops the whole wall being a silhouette ---- */
+  var gmid = (GEAR.railZ0 + GEAR.railZ1) / 2, glen = GEAR.railZ1 - GEAR.railZ0;
+  b.box(0.085, 0.145, glen, GEAR.railX, GEAR.railY, gmid, C.peg);
+  b.box(0.098, 0.030, glen, GEAR.railX, GEAR.railY + 0.088, gmid, C.shelf);
+  b.box(0.062, 0.024, glen - 0.24, -4.398, GEAR.railY - 0.082, gmid,
+        0xffcf96, 0, { glow: GLOW.warm, glowI: 0.45 });
+  var pegs = [GEAR.peg.medal, GEAR.peg.helmet, GEAR.peg.goggles, GEAR.peg.cap,
+              GEAR.peg.suit, GEAR.peg.wet, GEAR.peg.towel];
+  for (i = 0; i < pegs.length; i++){
+    b.cyl(0.021, 0.021, 0.150, 6, -4.345, GEAR.railY - 0.02, pegs[i], C.metal, [0, 0, Math.PI/2]);
+    b.ball(0.030, 6, -4.276, GEAR.railY - 0.02, pegs[i], C.metal);
+  }
+  for (i = 0; i < 2; i++){
+    a = i ? GEAR.railZ1 - 0.30 : GEAR.railZ0 + 0.30;
+    b.box(0.070, 0.300, 0.075, -4.462, GEAR.railY - 0.06, a, C.metal);
+    b.box(0.130, 0.050, 0.075, -4.420, GEAR.railY - 0.185, a, C.metal);
+  }
+
+  b.box(0.100, 0.075, 1.05, -4.385, 4.62, 2.50, C.dark);
+  b.box(0.120, 0.030, 0.95, -4.360, 4.575, 2.50, 0xffcf96, 0, { glow: GLOW.warm, glowI: 0.60 });
+  b.box(0.055, 0.190, 0.055, -4.455, 4.74, 2.05, C.metal);
+  b.box(0.055, 0.190, 0.055, -4.455, 4.74, 2.95, C.metal);
 
   return b.build();
 }
@@ -1458,37 +1622,58 @@ var UI = (function(){
 if (typeof THREE === 'undefined'){ UI.flat(); return; }
 
 var canvas = document.getElementById('c');
-var renderer, gl;
 
+/* ---- capability tier ------------------------------------------------
+   Sniffed on a throwaway context, before the real renderer exists,
+   because the answer decides whether that renderer may ask for
+   multisampling, which cannot be turned on afterwards. Everything here
+   degrades detail, never layout: a low-tier machine sees the same room,
+   lit the same way, with coarser curves and a smaller buffer.       */
+var LOW = false;
+try {
+  var probe = document.createElement('canvas');
+  var pg = probe.getContext('webgl') || probe.getContext('experimental-webgl');
+  if (pg){
+    var dbg = pg.getExtension('WEBGL_debug_renderer_info');
+    if (dbg){
+      var rend = String(pg.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '');
+      /* software rasterisers and pre-2010 Intel parts */
+      if (/SwiftShader|llvmpipe|Mesa DRI|Microsoft Basic|Gallium|\bGMA\b|945G[MC]?\b|950GM|X3100/i.test(rend)) LOW = true;
+      /* First-generation Intel HD, 2010 to 2011: "HD Graphics" bare, or
+         2000/2500/3000. Match the model explicitly rather than the family
+         name, because every UHD and Iris part, and every HD 4000 and up,
+         runs this scene at full resolution and has no business being
+         dropped to the low tier. \b before HD is what keeps UHD out. */
+      var hd = rend.match(/\bHD Graphics\s*(\d{3,4})?/i);
+      if (hd && !/\bUHD\b|\bIris\b/i.test(rend)){
+        var mod = hd[1] ? +hd[1] : 0;
+        if (!mod || mod === 2000 || mod === 2500 || mod === 3000) LOW = true;
+      }
+    }
+    var lose = pg.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  }
+  if (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2) LOW = true;
+} catch (e){}
+
+QUAL = LOW ? 1 : 2;
+
+var renderer, gl;
 try {
   renderer = new THREE.WebGLRenderer({
-    canvas: canvas, alpha: true, antialias: false,
+    canvas: canvas, alpha: true, antialias: !LOW,
     powerPreference: 'default', stencil: false, depth: true
   });
   gl = renderer.getContext();
   if (!gl) throw new Error('no context');
 } catch (err){ UI.flat(); return; }
 
-/* ---- capability tier ------------------------------------------------
-   Decides how much atmosphere the machine gets. Everything here degrades
-   detail, never layout: a low-tier machine sees the same room, lit the
-   same way, with fewer motes and a coarser buffer.                    */
-var LOW = false;
-try {
-  var dbg = gl.getExtension('WEBGL_debug_renderer_info');
-  if (dbg){
-    var rend = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '');
-    if (/GMA|945G|950|965|X3100|SwiftShader|llvmpipe|Mesa DRI|Microsoft Basic|Gallium/i.test(rend)) LOW = true;
-    if (/Intel.*HD Graphics(\s*(2000|3000))?(\s|$)/i.test(rend)) LOW = true;
-  }
-  if (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2) LOW = true;
-} catch (e){}
-
 var REDUCED = false;
 try { REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e){}
 
-var DPR_CAP = LOW ? 0.72 : Math.min(window.devicePixelRatio || 1, 1.5);
-var scale = LOW ? 0.62 : Math.min(window.devicePixelRatio || 1, 1.25);
+var DPR_CAP = LOW ? 0.72 : Math.min(window.devicePixelRatio || 1, 2);
+var SCALE_MIN = LOW ? 0.45 : 0.70;
+var scale = LOW ? 0.62 : Math.min(window.devicePixelRatio || 1, 1.5);
 
 renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(1);
@@ -1591,6 +1776,8 @@ var bulbGlow = bloom(1.95, 2.70, -3.40, 1.05, 0xffc27a, 0.72);
 bloom(0.00, 2.60, -4.00, 1.70, 0x4aa8d8, 0.20);
 bloom(-0.60, 3.44, -4.00, 1.30, 0xffca92, 0.13);
 bloom(-4.08, 3.97, -2.70, 0.80, 0xbfd4ff, 0.26);
+bloom(-4.22, 4.56, 2.50, 1.20, 0xffc98e, 0.26);
+bloom(-4.28, 1.98, 2.40, 1.05, 0xffc07a, 0.16);
 
 /* dust in the lamp cone */
 var dust = null;
@@ -1795,14 +1982,18 @@ spot('skills', 'AI/ML Systems', [76, 78, 1.55], function(b, x){
 
 /* ------------------------------------------------------------
    THE GEAR CORNER
-   The bike is authored side-on in local coordinates (long axis Z,
-   frame in the YZ plane) and placed once with a lean into the wall,
-   which is what setBase exists for. Everything else sits around it.
+   The bike hangs off the left wall on two rim hooks, which is where
+   a road bike actually lives in a flat and which clears the floor
+   for everything else. It is authored side-on in local coordinates
+   (long axis Z, frame in the YZ plane) and placed once with a base
+   matrix, which is what setBase exists for. The rail underneath
+   carries the swim and race kit; the floor carries what you step
+   into on the way out of the door.
    ------------------------------------------------------------ */
 
-var BIKE = { x: -4.05, z: 0.60, lean: 0.14 };
+var BIKE = { x: -4.14, y: 2.44, z: 2.50, lean: 0.02 };
 var FRAME = 0x1e222a, CARBON = 0x282d36, RUBBER = 0x111316,
-    ALLOY = 0x8b93a2, DECAL = 0xe4e9f2;
+    ALLOY = 0x8b93a2, DECAL = 0xe4e9f2, ROTOR = 0x9aa3b2;
 
 /* an aero tube between two points in the local YZ plane. The SL9's tubes
    are flattened sections, not round, so a box is both simpler and truer. */
@@ -1812,26 +2003,89 @@ function bar(b, ay, az, by, bz, w, th, col, xo){
   b.box(w, L, th, xo || 0, (ay+by)/2, (az+bz)/2, col, [Math.atan2(dz, dy), 0, 0]);
 }
 
-/* deep-section Roval-style carbon wheel: the rim face is a flat annulus,
-   which is what actually reads as "deep carbon" from the side */
+/* Roval Rapide CLX III: 51mm front, 60mm rear, so the rear rim face is
+   the deeper annulus. The flat face is what reads as "deep carbon" from
+   the side; the rotor is what dates the bike to the disc era. */
 function wheel(b, cz, rear){
+  var inner = rear ? 0.432 : 0.452;
+
   b.push(gTorus(0.600, 0.040, 5, 20), xf(0, 0.64, cz, 0, Math.PI/2, 0), RUBBER);
-  b.push(gRing(0.450, 0.582, 22), xf(0, 0.64, cz, 0,  Math.PI/2, 0), CARBON);
-  b.push(gRing(0.450, 0.582, 22), xf(0, 0.64, cz, 0, -Math.PI/2, 0), CARBON);
+  b.push(gRing(0.572, 0.601, 22), xf(0, 0.64, cz, 0,  Math.PI/2, 0), 0x23272f);
+  b.push(gRing(0.572, 0.601, 22), xf(0, 0.64, cz, 0, -Math.PI/2, 0), 0x23272f);
+  b.push(gRing(inner, 0.578, 22), xf(0, 0.64, cz, 0,  Math.PI/2, 0), CARBON);
+  b.push(gRing(inner, 0.578, 22), xf(0, 0.64, cz, 0, -Math.PI/2, 0), CARBON);
+  b.push(gRing(0.552, 0.578, 22), xf(0, 0.64, cz, 0,  Math.PI/2, 0), 0x3a414e);
+  b.push(gRing(0.552, 0.578, 22), xf(0, 0.64, cz, 0, -Math.PI/2, 0), 0x3a414e);
+
   b.cyl(0.058, 0.058, 0.13, 8, 0, 0.64, cz, ALLOY, [0, 0, Math.PI/2]);
-  for (var s = 0; s < 8; s++){
-    b.box(0.009, 0.026, 0.92, 0, 0.64, cz, 0x333944, [s * Math.PI / 8, 0, 0]);
+  b.cyl(0.040, 0.040, 0.15, 8, 0, 0.64, cz, 0x2f3540, [0, 0, Math.PI/2]);
+  for (var s = 0, ns = 6 * QUAL; s < ns; s++){
+    b.box(0.007, 0.024, 0.92, 0, 0.64, cz, 0x333944, [s * Math.PI / ns, 0, 0]);
   }
+
+  /* the valve: a two-millimetre detail that stops the rim reading as a disc */
+  b.cyl(0.011, 0.011, 0.075, 5, 0, 1.175, cz, ALLOY);
+
+  /* rotor and caliper sit on the non-drive side, seen through the open
+     centre of the wheel from the drive side we are looking at */
+  b.push(gRing(0.098, 0.196, 18), xf(-0.088, 0.64, cz, 0, -Math.PI/2, 0), ROTOR);
+  b.push(gRing(0.098, 0.196, 18), xf(-0.088, 0.64, cz, 0,  Math.PI/2, 0), 0x767f8d);
+  b.cyl(0.098, 0.098, 0.016, 10, -0.088, 0.64, cz, 0x5c6472, [0, 0, Math.PI/2]);
+  b.box(0.055, 0.155, 0.075, -0.086, 0.64 + (rear ? 0.13 : 0.16),
+        cz + (rear ? 0.20 : -0.19), 0x373d49);
+
   if (rear){
-    for (var d = 0; d < 5; d++){
-      var rr = 0.125 - d * 0.017;
-      b.cyl(rr, rr, 0.011, 10, 0.072 + d * 0.016, 0.64, cz, ALLOY, [0, 0, Math.PI/2]);
+    /* the cassette, biggest sprocket inboard, on the drive side */
+    for (var d = 0; d < 6; d++){
+      var rr = 0.130 - d * 0.0155;
+      b.cyl(rr, rr, 0.010, 10, 0.070 + d * 0.015, 0.64, cz, ALLOY, [0, 0, Math.PI/2]);
     }
   }
 }
 
-spot('sports', 'Cycling', [64, 74, 6.40], function(b, x){
-  var baseM = xf(BIKE.x, 0, BIKE.z, 0, 0, BIKE.lean);
+/* the wall hook each rim hangs in: plate, arm, and a rubber-sleeved U
+   the tyre crown sits inside */
+function rimHook(b, wz){
+  var top = BIKE.y + 1.28;
+  b.box(0.035, 0.34, 0.150, -4.452, top + 0.30,  wz - 0.12, C.metal);
+  b.box(0.300, 0.062, 0.082, -4.300, top + 0.335, wz - 0.12, C.metal);
+  b.box(0.064, 0.300, 0.082, -4.152, top + 0.190, wz - 0.12, 0x2c313a);
+  b.box(0.064, 0.058, 0.300, -4.152, top + 0.029, wz + 0.01, 0x2c313a);
+  b.box(0.064, 0.170, 0.082, -4.152, top + 0.120, wz + 0.145, 0x2c313a);
+  b.box(0.026, 0.058, 0.026, -4.434, top + 0.40,  wz - 0.12, ALLOY);
+  b.box(0.026, 0.058, 0.026, -4.434, top + 0.20,  wz - 0.12, ALLOY);
+}
+
+/* a road shoe: white synthetic upper, two dials, and a three-bolt cleat
+   on the one that fell over, which is the only part that says "road" */
+function cycShoe(b, x, sx, sz, ry, tipped){
+  var M = tipped ? xf(sx, 0.090, sz, 0, ry, 1.45) : xf(sx, 0, sz, 0, ry, 0);
+  b.setBase(M);
+  b.box(0.180, 0.028, 0.480, 0, 0.016, 0, 0x16191f);
+  b.box(0.168, 0.105, 0.400, 0, 0.082, 0.010, 0xe6e3dc);
+  b.box(0.150, 0.080, 0.130, 0, 0.072, 0.240, 0xe6e3dc);
+  b.box(0.162, 0.115, 0.115, 0, 0.145, -0.185, 0xdad6cd);
+  b.box(0.170, 0.030, 0.150, 0, 0.196, -0.105, 0x22262e);
+  b.box(0.100, 0.026, 0.190, 0, 0.140, 0.040, 0x22262e);
+  b.cyl(0.030, 0.030, 0.020, 8, 0.082, 0.120, 0.060, 0x2f3540, [0, 0, Math.PI/2]);
+  b.cyl(0.030, 0.030, 0.020, 8, 0.082, 0.126, -0.075, 0x2f3540, [0, 0, Math.PI/2]);
+  b.box(0.012, 0.012, 0.130, 0.086, 0.122, -0.008, 0xb9bec8);
+  if (tipped){
+    b.box(0.110, 0.020, 0.135, 0, 0.002, 0.150, 0xd8542e);
+    b.box(0.030, 0.014, 0.030, 0, -0.006, 0.100, 0x22262e);
+  }
+  var rig = new THREE.Object3D();
+  rig.applyMatrix4(M);
+  rig.add(decal(texSLogo(), 0.055, 0.065, 0.086, 0.110, -0.160, 0, Math.PI/2, 0));
+  x.push(rig);
+  b.setBase(null);
+}
+
+spot('sports', 'Cycling', [66, 80, 7.80], function(b, x){
+  rimHook(b, BIKE.z - 1.00);
+  rimHook(b, BIKE.z + 1.00);
+
+  var baseM = xf(BIKE.x, BIKE.y, BIKE.z, 0, 0, BIKE.lean);
   b.setBase(baseM);
 
   wheel(b, -1.00, true);
@@ -1849,38 +2103,77 @@ spot('sports', 'Cycling', [64, 74, 6.40], function(b, x){
   bar(b, 0.96, -0.24, 0.64, -1.00, 0.028, 0.044, FRAME, -0.042);
   bar(b, 1.00,  0.88, 0.64,  1.00, 0.032, 0.070, FRAME,  0.046);  /* fork blades  */
   bar(b, 1.00,  0.88, 0.64,  1.00, 0.032, 0.070, FRAME, -0.046);
+  b.box(0.115, 0.075, 0.105, 0, 1.030, 0.870, FRAME);             /* fork crown   */
+  b.box(0.070, 0.055, 0.060, 0.042, 0.665, -0.985, 0x2c313a);     /* dropouts     */
+  b.box(0.070, 0.055, 0.060, 0.042, 0.665,  0.985, 0x2c313a);
 
-  /* aero D-shaped seatpost and saddle */
+  /* S-Works Power saddle: short nose, and the centre relief channel every
+     one of them has, cut in as two rails with a gap down the middle */
   bar(b, 1.20, -0.29, 1.47, -0.34, 0.044, 0.078, FRAME);
-  b.box(0.115, 0.042, 0.34, 0, 1.51, -0.35, 0x14171c);
-  b.box(0.055, 0.034, 0.14, 0, 1.512, -0.16, 0x14171c);
+  b.box(0.030, 0.040, 0.075, 0, 1.455, -0.315, 0x2c313a);
+  b.box(0.046, 0.040, 0.320, -0.034, 1.512, -0.350, 0x14171c);
+  b.box(0.046, 0.040, 0.320,  0.034, 1.512, -0.350, 0x14171c);
+  b.box(0.114, 0.038, 0.115, 0, 1.512, -0.470, 0x14171c);
+  b.box(0.050, 0.032, 0.150, 0, 1.510, -0.160, 0x14171c);
 
-  /* one-piece integrated cockpit: flat aero top, no visible stem clamp */
+  /* one-piece Roval Rapide cockpit: flat aero top, no visible stem clamp,
+     bar tape only where the hands go */
   b.box(0.44, 0.030, 0.150, 0, 1.425, 0.700, FRAME);
   b.box(0.115, 0.028, 0.190, 0, 1.425, 0.815, FRAME);
-  b.box(0.046, 0.175, 0.046, -0.205, 1.340, 0.760, FRAME, [0.42, 0, 0]);
-  b.box(0.046, 0.175, 0.046,  0.205, 1.340, 0.760, FRAME, [0.42, 0, 0]);
-  b.box(0.046, 0.046, 0.165, -0.205, 1.262, 0.690, FRAME, [-0.30, 0, 0]);
-  b.box(0.046, 0.046, 0.165,  0.205, 1.262, 0.690, FRAME, [-0.30, 0, 0]);
-  b.box(0.052, 0.090, 0.052, -0.205, 1.400, 0.625, 0x0e1014);
+  b.box(0.046, 0.175, 0.046, -0.205, 1.340, 0.760, 0x15181e, [0.42, 0, 0]);
+  b.box(0.046, 0.175, 0.046,  0.205, 1.340, 0.760, 0x15181e, [0.42, 0, 0]);
+  b.box(0.046, 0.046, 0.165, -0.205, 1.262, 0.690, 0x15181e, [-0.30, 0, 0]);
+  b.box(0.046, 0.046, 0.165,  0.205, 1.262, 0.690, 0x15181e, [-0.30, 0, 0]);
+  b.box(0.052, 0.090, 0.052, -0.205, 1.400, 0.625, 0x0e1014);     /* hoods       */
   b.box(0.052, 0.090, 0.052,  0.205, 1.400, 0.625, 0x0e1014);
+  b.box(0.030, 0.105, 0.030, -0.213, 1.330, 0.606, 0x2f3540, [-0.16, 0, 0]);
+  b.box(0.030, 0.105, 0.030,  0.213, 1.330, 0.606, 0x2f3540, [-0.16, 0, 0]);
+  b.box(0.022, 0.024, 0.230, -0.196, 1.408, 0.700, 0x2a303a);     /* brake hoses */
+  b.box(0.022, 0.024, 0.230,  0.196, 1.408, 0.700, 0x2a303a);
+
+  /* head unit on an out-front mount, screen up, because every one of
+     these bikes has one and it is the fastest read in the whole model */
+  b.box(0.060, 0.026, 0.120, 0, 1.452, 0.905, 0x2f3540);
+  b.box(0.115, 0.032, 0.150, 0, 1.474, 0.965, 0x16191f);
+  var hud = screenMesh(texHeadUnit(), 0.095, 0.125, 0, 1.490, 0.965, -Math.PI/2, 0, 0, 0.004);
+  hud.applyMatrix4(baseM);
+  x.push(hud);
 
   /* drivetrain, all on the camera-facing side so it reads */
   b.cyl(0.205, 0.205, 0.013, 14, 0.062, 0.42, 0.02, ALLOY, [0, 0, Math.PI/2]);
   b.cyl(0.150, 0.150, 0.013, 12, 0.070, 0.42, 0.02, 0x3d434f, [0, 0, Math.PI/2]);
+  b.cyl(0.072, 0.072, 0.028, 10, 0.058, 0.42, 0.02, 0x22262e, [0, 0, Math.PI/2]);
+  for (var cr = 0; cr < 5; cr++){                    /* power meter spider */
+    var ca = cr * (Math.PI * 2 / 5) + 0.3;
+    b.box(0.018, 0.115, 0.038, 0.050, 0.42 + Math.sin(ca)*0.058, 0.02 + Math.cos(ca)*0.058,
+          0x2f3540, [ca, 0, 0]);
+  }
   b.box(0.026, 0.33, 0.038, 0.082, 0.575, 0.02, ALLOY, [-0.42, 0, 0]);
   b.box(0.026, 0.33, 0.038, -0.082, 0.265, 0.02, ALLOY, [-0.42, 0, 0]);
   b.box(0.100, 0.020, 0.155, 0.115, 0.735, 0.145, 0x14171c);
   b.box(0.100, 0.020, 0.155, -0.115, 0.105, -0.105, 0x14171c);
   bar(b, 0.625, 0.02, 0.765, -1.00, 0.014, 0.020, 0x4a515e, 0.086);
   bar(b, 0.245, 0.02, 0.475, -0.92, 0.014, 0.020, 0x4a515e, 0.086);
-  b.box(0.034, 0.170, 0.070, 0.086, 0.455, -0.945, 0x2f3540, [0.30, 0, 0]);
-  b.cyl(0.048, 0.048, 0.010, 8, 0.086, 0.375, -0.905, 0x3d434f, [0, 0, Math.PI/2]);
 
-  /* bottle cage and bottle on the down tube */
+  /* rear mech: parallelogram body, cage, two jockey wheels, AXS battery */
+  b.box(0.036, 0.185, 0.078, 0.086, 0.470, -0.945, 0x2f3540, [0.30, 0, 0]);
+  b.box(0.030, 0.105, 0.055, 0.088, 0.352, -0.905, 0x373d49, [-0.22, 0, 0]);
+  b.cyl(0.050, 0.050, 0.012, 8, 0.092, 0.398, -0.878, 0x4a515e, [0, 0, Math.PI/2]);
+  b.cyl(0.050, 0.050, 0.012, 8, 0.092, 0.262, -0.836, 0x4a515e, [0, 0, Math.PI/2]);
+  b.box(0.014, 0.150, 0.030, 0.100, 0.330, -0.857, 0x22262e, [-0.28, 0, 0]);
+  b.box(0.044, 0.070, 0.044, 0.078, 0.420, -0.968, 0x14171c);
+
+  /* front mech on the seat tube */
+  b.box(0.030, 0.105, 0.048, 0.070, 0.660, -0.098, 0x373d49, [-0.14, 0, 0]);
+  b.box(0.020, 0.060, 0.070, 0.082, 0.612, -0.062, 0x2f3540);
+
+  /* two bottle cages, which is how it leaves the house */
   b.box(0.030, 0.240, 0.026, 0.060, 0.830, -0.152, 0x5a6270, [-0.351, 0, 0]);
   b.cyl(0.058, 0.070, 0.310, 8, 0.098, 0.830, -0.150, 0x8e97a6, [-0.351, 0, 0]);
   b.cyl(0.030, 0.030, 0.050, 6, 0.098, 0.988, -0.207, 0x3d434f, [-0.351, 0, 0]);
+  b.box(0.028, 0.210, 0.024, 0.058, 0.760, -0.010, 0x5a6270, [0.06, 0, 0]);
+  b.cyl(0.054, 0.064, 0.280, 8, 0.092, 0.770, -0.005, 0x2f6fae, [0.06, 0, 0]);
+  b.cyl(0.028, 0.028, 0.046, 6, 0.092, 0.912, -0.014, 0x3d434f, [0.06, 0, 0]);
 
   /* the wordmarks: what turns "a road bike" into "an S-Works SL9" */
   var rig = new THREE.Object3D();
@@ -1892,65 +2185,221 @@ spot('sports', 'Cycling', [64, 74, 6.40], function(b, x){
   rig.add(decal(texSLogo(), 0.085, 0.105, 0.051, 1.205, 0.800, 0, Math.PI/2, 0.30));
   rig.add(decal(texWord('SPECIALIZED', 256, 32, '#7f8898', 17, false, 2),
                 0.30, 0.045, 0.024, 1.445, 0.700, -Math.PI/2, 0, 0));
+  rig.add(decal(texWord('TARMAC SL9', 256, 32, '#94a0b2', 19, false, 1.5),
+                0.36, 0.045, 0.023, 1.300, 0.235, -Math.PI/2, 0, -0.064));
+  rig.add(decal(texWord('ROVAL', 128, 32, '#7d8796', 18, false, 2),
+                0.30, 0.052, 0.008, 0.130, -1.000, 0, Math.PI/2, 0));
+  rig.add(decal(texWord('ROVAL', 128, 32, '#7d8796', 18, false, 2),
+                0.30, 0.052, 0.008, 0.130,  1.000, 0, Math.PI/2, 0));
   x.push(rig);
+  b.setBase(null);
+
+  /* S-Works Evade aero helmet on the first peg */
+  var hz = GEAR.peg.helmet;
+  b.box(0.026, 0.150, 0.020, -4.318, 1.985, hz - 0.055, 0x20242c);
+  b.box(0.026, 0.150, 0.020, -4.318, 1.985, hz + 0.055, 0x20242c);
+  b.push(gSphere(1, 10), xfs(-4.228, 1.826, hz, 0, 0, 0.10, 0.118, 0.106, 0.205), 0x1c2027);
+  b.push(gSphere(1, 8), xfs(-4.234, 1.856, hz, 0, 0, 0.10, 0.110, 0.088, 0.160), 0x343b47);
+  b.box(0.130, 0.026, 0.054, -4.206, 1.908, hz, 0xb9c2d2, [0, 0, 0.10]);
+  b.box(0.128, 0.024, 0.062, -4.208, 1.902, hz - 0.082, 0x0d0f13, [0, 0, 0.10]);
+  b.box(0.128, 0.024, 0.062, -4.208, 1.902, hz + 0.082, 0x0d0f13, [0, 0, 0.10]);
+  b.box(0.150, 0.075, 0.026, -4.238, 1.790, hz - 0.118, 0x0d0f13);
+  b.box(0.150, 0.075, 0.026, -4.238, 1.790, hz + 0.118, 0x0d0f13);
+  x.push(decal(texSLogo(), 0.060, 0.072, -4.116, 1.836, hz, 0, Math.PI/2, 0));
+
+  /* S-Works Torch road shoes, one upright, one tipped onto its cleat */
+  cycShoe(b, x, -4.095, 2.66, 0.55, false);
+  cycShoe(b, x, -3.855, 2.45, 0.20, true);
+
+  /* the track pump lives against the wall like it does in every flat */
+  b.box(0.300, 0.035, 0.330, -4.290, 0.020, 0.78, 0x22262e);
+  b.box(0.090, 0.030, 0.090, -4.290, 0.050, 0.78, 0x2f3540);
+  b.cyl(0.048, 0.048, 1.220, 8, -4.290, 0.660, 0.78, 0x6e7684);
+  b.cyl(0.030, 0.030, 0.130, 6, -4.290, 1.320, 0.78, C.metal);
+  b.box(0.062, 0.050, 0.360, -4.290, 1.380, 0.78, 0x16191f);
+  b.cyl(0.100, 0.100, 0.034, 10, -4.205, 0.300, 0.78, 0x22262e, [0, 0, Math.PI/2]);
+  x.push(screenMesh(texGauge(), 0.150, 0.150, -4.188, 0.300, 0.78, 0, Math.PI/2, 0, 0.004));
+  b.box(0.026, 0.026, 0.300, -4.230, 0.210, 0.93, 0x16191f, [0.40, 0, 0]);
+  b.box(0.026, 0.240, 0.026, -4.215, 0.330, 1.06, 0x16191f, [0.55, 0, 0]);
 }, 'cycling');
 
-spot('sports', 'Running', [58, 56, 2.10], function(b, x){
-  /* A pair of Adizero EVO SLs kicked off by the bike, not squared up.
-     Black upper on a pale Lightstrike midsole: the contrast is what makes
-     the racing-flat profile legible at all in a room this dark. */
-  var MID = 0xd8d4c8, OUT = 0x16181d, UP = 0x141619, UP2 = 0x1e2128, STRIPE = 0xeef1f6;
+spot('sports', 'Running', [58, 60, 2.75], function(b, x){
+  /* A pair of Adizero EVO SLs kicked off under the bike, not squared up.
+     Cream Lightstrike under a black upper: the contrast is the only
+     reason the racing-flat profile is legible in a room this dark.
+     What makes it an EVO SL and not just a trainer: the tall flared
+     heel with its bevel, the deep toe rocker, the exposed foam under
+     the arch, and the three stripes raking forward off the midsole. */
+  var MID = 0xd9d5c9, MID2 = 0xc2bdb0, OUT = 0x15171c,
+      UP = 0x131519, UP2 = 0x1d2027, STRIPE = 0xf0f2f6;
 
   var shoe = function(sx, sz, ry){
     var M = xf(sx, 0, sz, 0, ry, 0);
     b.setBase(M);
 
-    b.box(0.200, 0.020, 0.560, 0, 0.010, 0.00, OUT);          /* outsole        */
-    b.box(0.202, 0.105, 0.195, 0, 0.072, -0.170, MID);        /* heel stack     */
-    b.box(0.198, 0.082, 0.230, 0, 0.061, 0.010, MID);         /* midfoot        */
-    b.box(0.186, 0.055, 0.190, 0, 0.047, 0.205, MID);         /* forefoot       */
-    b.box(0.176, 0.040, 0.090, 0, 0.038, 0.300, MID, [0.30, 0, 0]);  /* toe spring */
+    /* outsole: Continental rubber under the forefoot and the heel, bare
+       foam through the arch, which is the EVO SL's own cutout */
+    b.box(0.188, 0.020, 0.280, 0, 0.010, 0.180, OUT);
+    b.box(0.190, 0.020, 0.155, 0, 0.010, -0.200, OUT);
 
-    b.box(0.176, 0.090, 0.450, 0, 0.152, -0.020, UP);         /* upper          */
-    b.box(0.158, 0.062, 0.150, 0, 0.122, 0.218, UP);          /* toe box        */
-    b.box(0.170, 0.115, 0.115, 0, 0.196, -0.208, UP2);        /* heel counter   */
-    b.box(0.178, 0.030, 0.150, 0, 0.238, -0.130, UP2);        /* collar         */
-    b.box(0.108, 0.028, 0.150, 0, 0.222, 0.020, 0x2a2e36);    /* tongue         */
-    for (var l = 0; l < 3; l++){
-      b.box(0.130, 0.012, 0.016, 0, 0.226, 0.075 - l * 0.055, 0x6e7686);
+    /* midsole: tall flared heel with a bevel, waisted middle, and a
+       forefoot that lifts off the ground well before the toe does */
+    b.box(0.202, 0.094, 0.170, 0, 0.065, -0.195, MID);
+    b.box(0.186, 0.066, 0.090, 0, 0.044, -0.292, MID, [-0.46, 0, 0]);
+    b.box(0.196, 0.086, 0.150, 0, 0.061, -0.055, MID);
+    b.box(0.188, 0.078, 0.140, 0, 0.053, 0.070, MID);
+    b.box(0.192, 0.068, 0.160, 0, 0.045, 0.195, MID);
+    b.box(0.172, 0.054, 0.110, 0, 0.042, 0.300, MID, [0.44, 0, 0]);
+    b.box(0.124, 0.044, 0.070, 0, 0.060, 0.352, MID, [0.80, 0, 0]);
+    for (var g = 0; g < 4; g++){
+      b.box(0.206, 0.009, 0.014, 0, 0.038, -0.240 + g * 0.110, MID2);
     }
 
-    /* the three stripes, on the lateral side that faces the camera */
+    /* upper: thin mesh, low collar, barely there heel counter */
+    b.box(0.164, 0.082, 0.370, 0, 0.140, -0.020, UP);
+    b.box(0.140, 0.062, 0.150, 0, 0.116, 0.212, UP);
+    b.box(0.108, 0.044, 0.095, 0, 0.100, 0.300, UP, [0.34, 0, 0]);
+    b.box(0.158, 0.098, 0.115, 0, 0.170, -0.198, UP2);
+    b.box(0.168, 0.026, 0.150, 0, 0.216, -0.118, UP2);
+    b.box(0.096, 0.024, 0.160, 0, 0.196, 0.030, 0x262a32);
+    b.box(0.014, 0.060, 0.026, 0, 0.246, -0.252, UP2);
+    for (var l = 0; l < 4; l++){
+      b.box(0.122, 0.011, 0.014, 0, 0.200, 0.086 - l * 0.046, 0x767e8c,
+            [0, (l % 2 ? -0.30 : 0.30), 0]);
+    }
+
+    /* the three stripes rake forward off the midsole. adidas puts them on
+       both sides, which is what lets the pair read whichever way it lands */
     for (var s = 0; s < 3; s++){
-      b.box(0.014, 0.105, 0.030, 0.088, 0.150, 0.010 + s * 0.052, STRIPE, [0.58, 0, 0]);
+      b.box(0.014, 0.128, 0.030,  0.082, 0.130, -0.005 + s * 0.052, STRIPE, [0.52, 0, 0]);
+      b.box(0.014, 0.128, 0.030, -0.082, 0.130, -0.005 + s * 0.052, STRIPE, [0.52, 0, 0]);
     }
 
     var rig = new THREE.Object3D();
     rig.applyMatrix4(M);
-    rig.add(decal(texWord('adizero', 256, 56, '#eef1f6', 34, false, 1),
-                  0.150, 0.033, 0.090, 0.196, -0.185, 0, Math.PI/2, 0));
+    rig.add(decal(texWord('adizero', 256, 56, '#1b1d22', 34, false, 1),
+                  0.150, 0.033,  0.103, 0.055, -0.085, 0,  Math.PI/2, 0));
+    rig.add(decal(texWord('adizero', 256, 56, '#1b1d22', 34, false, 1),
+                  0.150, 0.033, -0.103, 0.055, -0.085, 0, -Math.PI/2, 0));
     x.push(rig);
+    b.setBase(null);
   };
 
-  shoe(-3.30, 2.06,  0.34);
-  shoe(-2.99, 1.84, -0.22);
+  shoe(-3.88, 1.54, -0.52);
+  shoe(-3.60, 1.28,  2.78);
+
+  /* foam roller, because the legs do not recover on their own */
+  b.cyl(0.115, 0.115, 0.620, 10, -3.16, 0.115, 0.86, 0x39414f, [Math.PI/2, 0, 0.12]);
+  b.cyl(0.120, 0.120, 0.045, 10, -3.16, 0.115, 0.59, 0x4b5462, [Math.PI/2, 0, 0.12]);
+  b.cyl(0.120, 0.120, 0.045, 10, -3.16, 0.115, 1.13, 0x4b5462, [Math.PI/2, 0, 0.12]);
 }, 'running');
 
-spot('sports', 'Race results', [70, 74, 1.50], function(b, x){
-  /* three medals on a wall hook, one per race */
-  b.box(0.05, 0.05, 0.42, -4.455, 2.92, 1.90, 0x3b4150);
-  b.cyl(0.022, 0.022, 0.10, 6, -4.41, 2.90, 1.90, ALLOY, [0, 0, Math.PI/2]);
+spot('sports', 'Swimming', [64, 80, 4.10], function(b, x){
+  var NEO = 0x161a21, NEO2 = 0x1f2530, SUIT = 0x16203a, SUIT2 = 0x233457,
+      LENS = 0x63a8d8, GASK = 0x1b2330;
 
+  /* goggles, hanging by the strap off their peg */
+  var gz = GEAR.peg.goggles;
+  b.box(0.022, 0.135, 0.018, -4.316, 1.985, gz - 0.090, 0x2b3240);
+  b.box(0.022, 0.135, 0.018, -4.316, 1.985, gz + 0.090, 0x2b3240);
+  b.box(0.022, 0.020, 0.190, -4.316, 1.920, gz, 0x2b3240);
+  b.push(gSphere(1, 8), xfs(-4.290, 1.856, gz - 0.072, 0, 0, 0, 0.042, 0.050, 0.060), GASK);
+  b.push(gSphere(1, 8), xfs(-4.290, 1.856, gz + 0.072, 0, 0, 0, 0.042, 0.050, 0.060), GASK);
+  b.push(gSphere(1, 8), xfs(-4.256, 1.856, gz - 0.072, 0, 0, 0, 0.030, 0.040, 0.050), LENS,
+         { glow: [0.09, 0.15, 0.20] });
+  b.push(gSphere(1, 8), xfs(-4.256, 1.856, gz + 0.072, 0, 0, 0, 0.030, 0.040, 0.050), LENS,
+         { glow: [0.09, 0.15, 0.20] });
+  b.box(0.026, 0.016, 0.070, -4.286, 1.848, gz, 0x2b3240);
+
+  /* silicone cap on the next peg */
+  var cz = GEAR.peg.cap;
+  b.box(0.020, 0.090, 0.016, -4.316, 1.985, cz, 0x2f7fd0);
+  b.push(gSphere(1, 9), xfs(-4.282, 1.866, cz, 0, 0, 0, 0.082, 0.110, 0.104), 0x2f7fd0);
+  b.push(gRing(0.062, 0.098, 14), xf(-4.198, 1.866, cz, 0, Math.PI/2, 0), 0xe8ebf0);
+
+  /* the swimsuit: race jammers, clipped to a hanger by the waistband */
+  var jz = GEAR.peg.suit;
+  b.cyl(0.014, 0.014, 0.110, 6, -4.310, 2.000, jz, ALLOY);
+  b.box(0.030, 0.026, 0.330, -4.310, 1.946, jz, 0x5b432c);
+  b.box(0.028, 0.070, 0.036, -4.308, 1.930, jz - 0.140, 0x9aa3b2);
+  b.box(0.028, 0.070, 0.036, -4.308, 1.930, jz + 0.140, 0x9aa3b2);
+  b.box(0.092, 0.078, 0.320, -4.300, 1.876, jz, 0x2c4171);
+  b.box(0.086, 0.180, 0.305, -4.300, 1.750, jz, SUIT);
+  b.box(0.080, 0.360, 0.138, -4.300, 1.482, jz - 0.086, SUIT);
+  b.box(0.080, 0.360, 0.138, -4.300, 1.482, jz + 0.086, SUIT);
+  b.box(0.072, 0.048, 0.134, -4.300, 1.288, jz - 0.086, 0x3c5a8e);
+  b.box(0.072, 0.048, 0.134, -4.300, 1.288, jz + 0.086, 0x3c5a8e);
+  b.box(0.013, 0.530, 0.024, -4.258, 1.568, jz - 0.148, 0xdbe3ef);
+  b.box(0.013, 0.530, 0.024, -4.258, 1.568, jz + 0.148, 0xdbe3ef);
+  b.box(0.030, 0.026, 0.030, -4.254, 1.858, jz - 0.030, 0xc9d2e0);
+  b.box(0.030, 0.026, 0.030, -4.254, 1.858, jz + 0.030, 0xc9d2e0);
+
+  /* the pool towel, thrown over the rail the way it actually lands */
+  var tz = GEAR.peg.towel;
+  b.box(0.115, 0.055, 0.520, -4.386, 2.188, tz, 0x6f8ca8);
+  b.box(0.070, 0.700, 0.500, -4.348, 1.820, tz, 0x6f8ca8);
+  b.box(0.072, 0.045, 0.500, -4.348, 1.610, tz, 0xdfe4ee);
+  b.box(0.072, 0.045, 0.500, -4.348, 1.520, tz, 0xdfe4ee);
+  b.box(0.060, 0.170, 0.470, -4.344, 1.410, tz, 0x62809c, [0, 0.08, 0]);
+
+  /* the open-water wetsuit, folded at the waist over a broad hanger,
+     which is how a neoprene suit is actually stored and the only pose
+     that fits under a bike without the two fighting for the same wall */
+  var wz = GEAR.peg.wet, wy = 2.02;
+  b.cyl(0.016, 0.016, 0.130, 6, -4.312, wy - 0.02, wz, ALLOY);
+  b.box(0.040, 0.034, 0.620, -4.312, wy - 0.10, wz, 0x5b432c);
+  b.box(0.120, 0.080, 0.290, -4.300, wy - 0.16, wz - 0.150, NEO, [-0.22, 0, 0]);
+  b.box(0.120, 0.080, 0.290, -4.300, wy - 0.16, wz + 0.150, NEO, [0.22, 0, 0]);
+  b.box(0.124, 0.100, 0.330, -4.300, wy - 0.05, wz, NEO2);           /* collar   */
+  b.box(0.118, 0.380, 0.470, -4.302, wy - 0.42, wz, NEO);            /* torso    */
+  b.box(0.104, 0.170, 0.430, -4.302, wy - 0.68, wz, NEO2);
+  b.box(0.086, 0.520, 0.150, -4.290, wy - 0.46, wz - 0.300, NEO, [-0.14, 0, 0]);
+  b.box(0.086, 0.520, 0.150, -4.290, wy - 0.46, wz + 0.300, NEO, [0.14, 0, 0]);
+  b.box(0.078, 0.110, 0.130, -4.290, wy - 0.77, wz - 0.336, 0x2f6fae, [-0.14, 0, 0]);
+  b.box(0.078, 0.110, 0.130, -4.290, wy - 0.77, wz + 0.336, 0x2f6fae, [0.14, 0, 0]);
+  /* the legs, doubled back over the hanger bar and hanging in front */
+  b.box(0.094, 0.760, 0.195, -4.222, wy - 0.46, wz - 0.108, NEO);
+  b.box(0.094, 0.760, 0.195, -4.222, wy - 0.46, wz + 0.108, NEO);
+  b.box(0.090, 0.130, 0.180, -4.222, wy - 0.90, wz - 0.108, 0x2f6fae);
+  b.box(0.090, 0.130, 0.180, -4.222, wy - 0.90, wz + 0.108, 0x2f6fae);
+  b.box(0.098, 0.090, 0.430, -4.222, wy - 0.07, wz, NEO2);
+  b.box(0.012, 0.560, 0.048, -4.176, wy - 0.48, wz, 0x233f63);       /* seam     */
+  b.box(0.014, 0.320, 0.020, -4.238, wy - 0.24, wz - 0.240, 0xb9c2d2);
+  b.box(0.024, 0.048, 0.024, -4.238, wy - 0.41, wz - 0.240, 0xdfe4ee);
+
+  /* kickboard against the wall, mesh bag beside it, pull buoy loose */
+  b.box(0.038, 0.560, 0.440, -4.332, 0.300, 2.98, 0x2f7fd0, [0.16, 0, 0]);
+  b.box(0.042, 0.180, 0.150, -4.330, 0.200, 2.98, 0xe8ebf0, [0.16, 0, 0]);
+  b.push(gSphere(1, 9), xfs(-3.940, 0.215, 3.30, 0, 0.4, 0, 0.200, 0.225, 0.215), 0x3c4553);
+  b.push(gSphere(1, 8), xfs(-3.940, 0.345, 3.30, 0, 0.4, 0, 0.135, 0.095, 0.145), 0x596374);
+  b.box(0.150, 0.028, 0.028, -3.940, 0.418, 3.30, 0x9aa3b2);
+  b.box(0.026, 0.150, 0.026, -3.870, 0.400, 3.36, 0x9aa3b2, [0.4, 0, 0.5]);
+  b.cyl(0.078, 0.078, 0.190, 8, -3.630, 0.078, 2.62, 0xe8ebf0, [0, 0, Math.PI/2]);
+  b.cyl(0.078, 0.078, 0.190, 8, -3.630, 0.078, 2.76, 0x2f7fd0, [0, 0, Math.PI/2]);
+  b.box(0.022, 0.022, 0.150, -3.630, 0.078, 2.69, 0x9aa3b2);
+}, 'swimming');
+
+spot('sports', 'Race results', [68, 80, 4.60], function(b, x){
+  /* medals on the rail, race bibs still pinned above the bike */
   var medal = function(mz, drop, face, ribbon){
-    b.box(0.014, drop, 0.11, -4.415, 2.90 - drop/2, mz, ribbon);
-    b.cyl(0.115, 0.115, 0.022, 12, -4.412, 2.90 - drop - 0.10, mz, face, [0, 0, Math.PI/2]);
-    b.cyl(0.075, 0.075, 0.026, 10, -4.406, 2.90 - drop - 0.10, mz, 0x6e5a2a, [0, 0, Math.PI/2]);
+    b.box(0.016, drop, 0.115, -4.312, 2.000 - drop/2, mz, ribbon);
+    b.cyl(0.115, 0.115, 0.022, 12, -4.308, 2.000 - drop - 0.10, mz, face, [0, 0, Math.PI/2]);
+    b.cyl(0.075, 0.075, 0.026, 10, -4.298, 2.000 - drop - 0.10, mz, 0x6e5a2a, [0, 0, Math.PI/2]);
   };
-  medal(1.74, 0.26, 0xc9a227, 0x8a3a30);
-  medal(1.90, 0.34, 0xb8b8c0, 0x2e5c70);
-  medal(2.06, 0.22, 0xc07a3a, 0x3f6b4a);
+  medal(GEAR.peg.medal - 0.17, 0.28, 0xc9a227, 0x8a3a30);
+  medal(GEAR.peg.medal,        0.40, 0xb8b8c0, 0x2e5c70);
+  medal(GEAR.peg.medal + 0.17, 0.22, 0xc07a3a, 0x3f6b4a);
 
-  x.push(ledMesh(0xffb45c, [[-4.40, 2.90, 1.62, 0.026]]));
+  var bib = function(bz, tilt, t){
+    b.box(0.016, 0.300, 0.360, -4.442, 3.980, bz, 0xe6e2d6, [tilt, 0, 0]);
+    x.push(screenMesh(t, 0.350, 0.290, -4.434, 3.980, bz, 0, Math.PI/2, tilt, 0.004));
+    b.box(0.022, 0.030, 0.030, -4.426, 4.088, bz - 0.130, 0x9aa3b2, [tilt, 0, 0]);
+    b.box(0.022, 0.030, 0.030, -4.426, 4.088, bz + 0.130, 0x9aa3b2, [tilt, 0, 0]);
+  };
+  bib(1.00, 0.055, texBib('ALMATY MARATHON', '1042', '21.1 KM', '#8a3a30'));
+  bib(1.58, -0.045, texBib('ASTANA HALF', '388', '21.1 KM', '#2e5c70'));
+
+  x.push(ledMesh(0xffb45c, [[-4.362, 2.086, GEAR.railZ0 + 0.10, 0.026]]));
 }, 'races');
 
 /* --- education --- */
@@ -2301,7 +2750,7 @@ function loop(now){
   if (fN >= 42){
     var ms = (fAcc / fN) * 1000;
     fAcc = 0; fN = 0;
-    if (ms > 26 && scale > 0.45){ scale = Math.max(0.45, scale - 0.10); resize(); }
+    if (ms > 26 && scale > SCALE_MIN){ scale = Math.max(SCALE_MIN, scale - 0.10); resize(); }
     else if (ms < 12.5 && scale < DPR_CAP){ scale = Math.min(DPR_CAP, scale + 0.06); resize(); }
   }
 }
