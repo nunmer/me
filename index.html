@@ -816,13 +816,7 @@ function xfs(x, y, z, rx, ry, rz, sx, sy, sz){
     new THREE.Vector3(sx, sy === undefined ? sx : sy, sz === undefined ? sx : sz));
 }
 
-function Builder(keepN){
-  this.pos = []; this.col = []; this.baseM = null;
-  /* normals are dead weight for a MeshBasicMaterial and are thrown
-     away by default. The bike keeps them, because it is the one
-     mesh lit for real and a Phong shader needs them. */
-  this.nrm = keepN ? [] : null;
-}
+function Builder(){ this.pos = []; this.col = []; this.baseM = null; }
 
 /* Lets an object be authored in convenient local coordinates and then placed
    once. The bake still runs on final world positions, so lighting stays
@@ -844,7 +838,6 @@ Builder.prototype.push = function(geo, mat, colorHex, opt){
     var c = shade(P[i], P[i+1], P[i+2], N[i], N[i+1], N[i+2], base, glow, ao);
     this.pos.push(P[i], P[i+1], P[i+2]);
     this.col.push(c[0], c[1], c[2]);
-    if (this.nrm) this.nrm.push(N[i], N[i+1], N[i+2]);
   }
   g.dispose();
   return this;
@@ -868,7 +861,6 @@ Builder.prototype.build = function(){
   var g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
-  if (this.nrm) g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
   g.computeBoundingSphere();
   g.computeBoundingBox();
   return g;
@@ -880,18 +872,6 @@ Builder.prototype.build = function(){
    material, no outline pass, no shader swap. */
 function bakedMat(){
   return new THREE.MeshBasicMaterial({ vertexColors: true });
-}
-
-/* The exception. Carbon and alloy need a highlight that slides as you
-   orbit; a baked vertex colour can only ever be matte, which is most of
-   why a box-built bike reads as a toy. So the bike keeps its baked
-   colour as the ambient term and gets a real key and fill on top. The
-   room is MeshBasicMaterial and those lights do not touch it, so the
-   cost is the lighting maths on exactly one mesh. */
-function glossMat(){
-  return new THREE.MeshPhongMaterial({
-    vertexColors: true, shininess: 26, specular: 0x74808f
-  });
 }
 
 /* ============================================================
@@ -1733,22 +1713,16 @@ function ledMesh(hex, pts){
 var DEG = Math.PI / 180;
 var SPOTS = [], SPOTBY = {}, PICK = [];
 
-function spot(id, label, view, build, hl, opt){
-  opt = opt || {};
-  var lit = !!opt.gloss && !LOW;
+function spot(id, label, view, build, hl){
   var g = new THREE.Group(), extras = [], i;
-  var b = new Builder(lit);
+  var b = new Builder();
   build(b, extras);
-  g.add(new THREE.Mesh(b.build(), lit ? glossMat() : bakedMat()));
+  g.add(new THREE.Mesh(b.build(), bakedMat()));
   for (i = 0; i < extras.length; i++) g.add(extras[i]);
 
   var bb = new THREE.Box3().setFromObject(g);
   var c = new THREE.Vector3();
   bb.getCenter(c);
-  /* A group whose members are spread from the floor to head height
-     frames badly on its own bounding box: the centre lands between the
-     things you came to look at. opt.center names the subject instead. */
-  if (opt.center) c.set(opt.center[0], opt.center[1], opt.center[2]);
 
   var s = {
     id: id, label: label, hl: hl || null, group: g, center: c,
@@ -1770,20 +1744,6 @@ function spot(id, label, view, build, hl, opt){
 
 /* ---- the static room: one mesh, one draw call ---- */
 scene.add(new THREE.Mesh(buildRoom(), bakedMat()));
-
-/* The first and only lights in this scene, and they reach exactly one
-   mesh: the bike. Ambient reproduces its baked colour, the key and fill
-   add the specular that makes carbon look like carbon. The low tier
-   never creates them and keeps the fully baked bike. */
-if (!LOW){
-  scene.add(new THREE.AmbientLight(0xffffff, 1.00));
-  var keyL = new THREE.DirectionalLight(0xffe8cc, 0.46);
-  keyL.position.set(3.4, 6.2, 2.6);
-  scene.add(keyL);
-  var fillL = new THREE.DirectionalLight(0xbcd2ff, 0.30);
-  fillL.position.set(-5.0, 3.6, 5.2);
-  scene.add(fillL);
-}
 
 /* ---- atmosphere ---- */
 var glowTex = radialTex('rgba(255,214,166,0.95)', 'rgba(255,170,90,0.30)', 64);
@@ -2024,201 +1984,69 @@ spot('skills', 'AI/ML Systems', [76, 78, 1.55], function(b, x){
    THE GEAR CORNER
    The bike hangs off the left wall on two rim hooks, which is where
    a road bike actually lives in a flat and which clears the floor
-   for everything else. The rail underneath carries the swim and race
-   kit; the floor carries what you step into on the way out.
-
-   THE BIKE is built from published Tarmac SL9 geometry rather than
-   guessed boxes: 990 wheelbase, 73.5 degree head and seat angles,
-   573 stack, 395 reach, 410 chainstays, 69 bottom bracket drop, 44
-   fork offset, all at one unit to 495mm. Proportion is most of what
-   makes a bike recognisable and the old model was a head shorter
-   than a real one relative to its wheels.
-
-   Its tubes are swept along curved paths with real aerofoil sections
-   instead of being rectangular prisms, because on this bike the
-   shapes ARE the product: the truncated-tail down tube, the
-   seatstays dropping to meet the seat tube a hand's width below the
-   top tube, the sloping top tube into a tall head tube, and the
-   one-piece cockpit. Every frame path lies in the bike's own YZ
-   plane, which makes the sweep frame trivial: lateral is always
-   local X and the other section axis is the path normal in that
-   plane. No Frenet frame, no twist, no degenerate cases.
+   for everything else. It is authored side-on in local coordinates
+   (long axis Z, frame in the YZ plane) and placed once with a base
+   matrix, which is what setBase exists for. The rail underneath
+   carries the swim and race kit; the floor carries what you step
+   into on the way out of the door.
    ------------------------------------------------------------ */
 
-var BIKE = { x: -4.14, y: 2.34, z: 2.50, lean: 0.02 };
-var FRAME = 0x232833, CARBON = 0x2a2f39, RUBBER = 0x141619,
-    ALLOY = 0x7f8794, ROTOR = 0x6c757f, R_W = 0.660;
+var BIKE = { x: -4.14, y: 2.44, z: 2.50, lean: 0.02 };
+var FRAME = 0x1e222a, CARBON = 0x282d36, RUBBER = 0x111316,
+    ALLOY = 0x8b93a2, DECAL = 0xe4e9f2, ROTOR = 0x9aa3b2;
 
-/* ---- section profiles -----------------------------------------------
-   What you would see if you cut the tube. A Tarmac's down tube is a
-   truncated aerofoil, not a cylinder, and that reads at a glance. */
-function secRound(n){
-  var s = [], i, a;
-  for (i = 0; i < n; i++){ a = i / n * Math.PI * 2; s.push([Math.sin(a), Math.cos(a)]); }
-  return s;
-}
-function secOval(n, p){
-  var s = [], i, a, c, t;
-  for (i = 0; i < n; i++){
-    a = i / n * Math.PI * 2; c = Math.sin(a); t = Math.cos(a);
-    s.push([(c < 0 ? -1 : 1) * Math.pow(Math.abs(c), 2 / p),
-            (t < 0 ? -1 : 1) * Math.pow(Math.abs(t), 2 / p)]);
-  }
-  return s;
-}
-function secAero(n){
-  /* a Kamm tail: full and round down one side, drawn in and truncated
-     down the other, which is the shape of every tube on this frame */
-  var s = [], i, a, u, v, mx = 0;
-  for (i = 0; i < n; i++){
-    a = i / n * Math.PI * 2;
-    v = Math.cos(a);
-    u = Math.sin(a) * (0.52 + 0.48 * Math.pow(0.5 - 0.5 * Math.cos(a), 0.55));
-    if (Math.abs(u) > mx) mx = Math.abs(u);
-    s.push([u, v]);
-  }
-  for (i = 0; i < n; i++) s[i][0] = s[i][0] / mx;
-  return s;
-}
-var S_AERO = null, S_OVAL = null, S_ROUND = null;
-var _IDM = new THREE.Matrix4();
-
-/* Catmull-Rom resample of a path given as [y,z] pairs */
-function pathYZ(pts, n){
-  var c = new THREE.CatmullRomCurve3(pts.map(function(p){
-    return new THREE.Vector3(0, p[0], p[1]);
-  }), false, 'catmullrom', 0.5);
-  var out = [], i, v;
-  for (i = 0; i <= n; i++){ v = c.getPoint(i / n); out.push([v.y, v.z]); }
-  return out;
+/* an aero tube between two points in the local YZ plane. The SL9's tubes
+   are flattened sections, not round, so a box is both simpler and truer. */
+function bar(b, ay, az, by, bz, w, th, col, xo){
+  var dy = by - ay, dz = bz - az;
+  var L = Math.sqrt(dy*dy + dz*dz);
+  b.box(w, L, th, xo || 0, (ay+by)/2, (az+bz)/2, col, [Math.atan2(dz, dy), 0, 0]);
 }
 
-/* Sweep a section along a planar path. w and t are the lateral width
-   and the in-plane depth, each either a number or a [start, end] pair
-   so a tube can taper; xo shifts it laterally, which is how the paired
-   stays, blades and drops are placed. Normals come from the section
-   rather than from the triangles, so a tube shades as a smooth surface
-   instead of a run of facets. */
-function sweep(b, path, sec, w, t, col, xo, opt){
-  var n = path.length, m = sec.length, P = [], N = [], i, j;
-  var w0 = w.length ? w[0] : w, w1 = w.length ? w[1] : w;
-  var t0 = t.length ? t[0] : t, t1 = t.length ? t[1] : t;
-  var ox0 = xo && xo.length ? xo[0] : (xo || 0);
-  var ox1 = xo && xo.length ? xo[1] : (xo || 0);
-  var ring = [], nrm = [], k, hw, ht, py, pz, ay, az, L, ny, nz, cx;
-
-  for (i = 0; i < n; i++){
-    py = path[i][0]; pz = path[i][1];
-    ay = path[Math.min(i + 1, n - 1)][0] - path[Math.max(i - 1, 0)][0];
-    az = path[Math.min(i + 1, n - 1)][1] - path[Math.max(i - 1, 0)][1];
-    L = Math.sqrt(ay * ay + az * az) || 1;
-    ay /= L; az /= L;
-    ny = -az; nz = ay;
-    k = n === 1 ? 0 : i / (n - 1);
-    hw = (w0 + (w1 - w0) * k) / 2;
-    ht = (t0 + (t1 - t0) * k) / 2;
-    cx = ox0 + (ox1 - ox0) * k;
-    ring[i] = []; nrm[i] = [];
-    for (j = 0; j < m; j++){
-      var u = sec[j][0] * hw, v = sec[j][1] * ht;
-      ring[i][j] = [cx + u, py + ny * v, pz + nz * v];
-      var pv = sec[(j + m - 1) % m], nv = sec[(j + 1) % m];
-      var du = (nv[0] - pv[0]) * hw, dv = (nv[1] - pv[1]) * ht;
-      var dl = Math.sqrt(du * du + dv * dv) || 1;
-      var gu = -dv / dl, gv = du / dl;
-      nrm[i][j] = [gu, gv * ny, gv * nz];
-    }
-  }
-
-  function vtx(p, q){ P.push(p[0], p[1], p[2]); N.push(q[0], q[1], q[2]); }
-  for (i = 0; i < n - 1; i++){
-    for (j = 0; j < m; j++){
-      var j2 = (j + 1) % m;
-      vtx(ring[i][j],      nrm[i][j]);
-      vtx(ring[i + 1][j2], nrm[i + 1][j2]);
-      vtx(ring[i + 1][j],  nrm[i + 1][j]);
-      vtx(ring[i][j],      nrm[i][j]);
-      vtx(ring[i][j2],     nrm[i][j2]);
-      vtx(ring[i + 1][j2], nrm[i + 1][j2]);
-    }
-  }
-  /* flat caps, so a tube end facing the camera is not a hole */
-  var cap = function(idx, sign){
-    var a0 = path[Math.min(idx + 1, n - 1)][0] - path[Math.max(idx - 1, 0)][0];
-    var a1 = path[Math.min(idx + 1, n - 1)][1] - path[Math.max(idx - 1, 0)][1];
-    var l = Math.sqrt(a0 * a0 + a1 * a1) || 1;
-    var nn = [0, sign * a0 / l, sign * a1 / l], q;
-    for (q = 1; q < m - 1; q++){
-      if (sign > 0){
-        vtx(ring[idx][0], nn); vtx(ring[idx][q], nn); vtx(ring[idx][q + 1], nn);
-      } else {
-        vtx(ring[idx][0], nn); vtx(ring[idx][q + 1], nn); vtx(ring[idx][q], nn);
-      }
-    }
-  };
-  cap(n - 1, 1); cap(0, -1);
-
-  var g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
-  b.push(g, _IDM, col, opt);
-  g.dispose();
-}
-
-/* ---- the wheel -------------------------------------------------------
-   Roval Rapide CLX III. The rim is a lathed section, not a pair of flat
-   discs, so it has an actual V down its depth to catch light; the tyre
-   is a torus seated in it; the spokes are bladed and laced to two
-   flanges rather than run straight through the hub. */
-var _rimGeo = null;
-function rimGeo(){
-  if (_rimGeo) return _rimGeo;
-  var pr = [[0.392, 0.000], [0.428, 0.021], [0.486, 0.031], [0.542, 0.035],
-            [0.576, 0.032], [0.590, 0.017], [0.590, -0.017], [0.576, -0.032],
-            [0.542, -0.035], [0.486, -0.031], [0.428, -0.021], [0.392, 0.000]];
-  _rimGeo = new THREE.LatheGeometry(pr.map(function(p){
-    return new THREE.Vector2(p[0], p[1]);
-  }), 16 * QUAL);
-  return _rimGeo;
-}
-
+/* Roval Rapide CLX III: 51mm front, 60mm rear, so the rear rim face is
+   the deeper annulus. The flat face is what reads as "deep carbon" from
+   the side; the rotor is what dates the bike to the disc era. */
 function wheel(b, cz, rear){
-  var s, a;
-  b.push(rimGeo(), xf(0, R_W, cz, 0, 0, -Math.PI/2), CARBON);
-  b.push(gTorus(0.607, 0.053, 8, 26), xf(0, R_W, cz, 0, Math.PI/2, 0), RUBBER);
+  var inner = rear ? 0.432 : 0.452;
 
-  b.cyl(0.048, 0.048, 0.180, 12, 0, R_W, cz, 0x333a46, [0, 0, Math.PI/2]);
-  b.cyl(0.082, 0.082, 0.014, 12, 0.042, R_W, cz, ALLOY, [0, 0, Math.PI/2]);
-  b.cyl(0.082, 0.082, 0.014, 12, -0.042, R_W, cz, ALLOY, [0, 0, Math.PI/2]);
-  b.cyl(0.026, 0.026, 0.240, 8, 0, R_W, cz, 0x5c6472, [0, 0, Math.PI/2]);
+  b.push(gTorus(0.600, 0.040, 5, 20), xf(0, 0.64, cz, 0, Math.PI/2, 0), RUBBER);
+  b.push(gRing(0.572, 0.601, 22), xf(0, 0.64, cz, 0,  Math.PI/2, 0), 0x23272f);
+  b.push(gRing(0.572, 0.601, 22), xf(0, 0.64, cz, 0, -Math.PI/2, 0), 0x23272f);
+  b.push(gRing(inner, 0.578, 22), xf(0, 0.64, cz, 0,  Math.PI/2, 0), CARBON);
+  b.push(gRing(inner, 0.578, 22), xf(0, 0.64, cz, 0, -Math.PI/2, 0), CARBON);
+  b.push(gRing(0.552, 0.578, 22), xf(0, 0.64, cz, 0,  Math.PI/2, 0), 0x3a414e);
+  b.push(gRing(0.552, 0.578, 22), xf(0, 0.64, cz, 0, -Math.PI/2, 0), 0x3a414e);
 
-  for (s = 0; s < 20; s++){
-    a = s * Math.PI * 2 / 20 + (rear ? 0.15 : 0);
-    b.box(0.005, 0.322, 0.009, s % 2 ? 0.036 : -0.036,
-          R_W + Math.cos(a) * 0.236, cz + Math.sin(a) * 0.236, 0x2e343f, [a, 0, 0]);
+  b.cyl(0.058, 0.058, 0.13, 8, 0, 0.64, cz, ALLOY, [0, 0, Math.PI/2]);
+  b.cyl(0.040, 0.040, 0.15, 8, 0, 0.64, cz, 0x2f3540, [0, 0, Math.PI/2]);
+  for (var s = 0, ns = 6 * QUAL; s < ns; s++){
+    b.box(0.007, 0.024, 0.92, 0, 0.64, cz, 0x333944, [s * Math.PI / ns, 0, 0]);
   }
 
-  /* rotor and caliper on the non-drive side, seen through the open
+  /* the valve: a two-millimetre detail that stops the rim reading as a disc */
+  b.cyl(0.011, 0.011, 0.075, 5, 0, 1.175, cz, ALLOY);
+
+  /* rotor and caliper sit on the non-drive side, seen through the open
      centre of the wheel from the drive side we are looking at */
-  b.push(gRing(0.072, 0.162, 20), xf(-0.094, R_W, cz, 0, -Math.PI/2, 0), ROTOR);
-  b.push(gRing(0.072, 0.162, 20), xf(-0.094, R_W, cz, 0, Math.PI/2, 0), 0x5b6472);
-  b.cyl(0.072, 0.072, 0.014, 12, -0.094, R_W, cz, 0x4a515e, [0, 0, Math.PI/2]);
-  b.box(0.046, 0.128, 0.060, -0.092, R_W + (rear ? 0.14 : 0.17),
-        cz + (rear ? 0.17 : -0.16), 0x2e343f);
+  b.push(gRing(0.098, 0.196, 18), xf(-0.088, 0.64, cz, 0, -Math.PI/2, 0), ROTOR);
+  b.push(gRing(0.098, 0.196, 18), xf(-0.088, 0.64, cz, 0,  Math.PI/2, 0), 0x767f8d);
+  b.cyl(0.098, 0.098, 0.016, 10, -0.088, 0.64, cz, 0x5c6472, [0, 0, Math.PI/2]);
+  b.box(0.055, 0.155, 0.075, -0.086, 0.64 + (rear ? 0.13 : 0.16),
+        cz + (rear ? 0.20 : -0.19), 0x373d49);
 
   if (rear){
-    for (s = 0; s < 6; s++){
-      var rr = 0.132 - s * 0.0158;
-      b.cyl(rr, rr, 0.009, 14, 0.066 + s * 0.0148, R_W, cz, ALLOY, [0, 0, Math.PI/2]);
+    /* the cassette, biggest sprocket inboard, on the drive side */
+    for (var d = 0; d < 6; d++){
+      var rr = 0.130 - d * 0.0155;
+      b.cyl(rr, rr, 0.010, 10, 0.070 + d * 0.015, 0.64, cz, ALLOY, [0, 0, Math.PI/2]);
     }
-    b.cyl(0.050, 0.050, 0.100, 10, 0.098, R_W, cz, 0x2b313b, [0, 0, Math.PI/2]);
   }
 }
 
 /* the wall hook each rim hangs in: plate, arm, and a rubber-sleeved U
    the tyre crown sits inside */
 function rimHook(b, wz){
-  var top = BIKE.y + R_W * 2;
+  var top = BIKE.y + 1.28;
   b.box(0.035, 0.34, 0.150, -4.452, top + 0.30,  wz - 0.12, C.metal);
   b.box(0.300, 0.062, 0.082, -4.300, top + 0.335, wz - 0.12, C.metal);
   b.box(0.064, 0.300, 0.082, -4.152, top + 0.190, wz - 0.12, 0x2c313a);
@@ -2239,8 +2067,8 @@ function cycShoe(b, x, sx, sz, ry, tipped){
   b.box(0.162, 0.115, 0.115, 0, 0.145, -0.185, 0xdad6cd);
   b.box(0.170, 0.030, 0.150, 0, 0.196, -0.105, 0x22262e);
   b.box(0.100, 0.026, 0.190, 0, 0.140, 0.040, 0x22262e);
-  b.cyl(0.030, 0.030, 0.020, 10, 0.082, 0.120, 0.060, 0x2f3540, [0, 0, Math.PI/2]);
-  b.cyl(0.030, 0.030, 0.020, 10, 0.082, 0.126, -0.075, 0x2f3540, [0, 0, Math.PI/2]);
+  b.cyl(0.030, 0.030, 0.020, 8, 0.082, 0.120, 0.060, 0x2f3540, [0, 0, Math.PI/2]);
+  b.cyl(0.030, 0.030, 0.020, 8, 0.082, 0.126, -0.075, 0x2f3540, [0, 0, Math.PI/2]);
   b.box(0.012, 0.012, 0.130, 0.086, 0.122, -0.008, 0xb9bec8);
   if (tipped){
     b.box(0.110, 0.020, 0.135, 0, 0.002, 0.150, 0xd8542e);
@@ -2253,12 +2081,7 @@ function cycShoe(b, x, sx, sz, ry, tipped){
   b.setBase(null);
 }
 
-spot('sports', 'Cycling', [66, 82, 6.20], function(b, x){
-  var NS = 7 * QUAL;
-  S_AERO = secAero(6 * QUAL);
-  S_OVAL = secOval(6 * QUAL, 2.5);
-  S_ROUND = secRound(5 * QUAL);
-
+spot('sports', 'Cycling', [66, 80, 7.80], function(b, x){
   rimHook(b, BIKE.z - 1.00);
   rimHook(b, BIKE.z + 1.00);
 
@@ -2268,117 +2091,106 @@ spot('sports', 'Cycling', [66, 82, 6.20], function(b, x){
   wheel(b, -1.00, true);
   wheel(b,  1.00, false);
 
-  /* ---- frame. The numbers are the published geometry converted:
-     bottom bracket 0.522 up and 0.184 back of centre, head tube top a
-     stack of 1.158 and a reach of 0.798 from it, both tubes at 73.5. */
-  sweep(b, pathYZ([[0.545, -0.158], [0.86, 0.14], [1.16, 0.44], [1.348, 0.668]], NS),
-        S_AERO, [0.056, 0.046], [0.145, 0.112], FRAME);            /* down tube  */
-  sweep(b, pathYZ([[0.540, -0.176], [0.85, -0.267], [1.16, -0.359], [1.471, -0.452]], NS),
-        S_AERO, [0.048, 0.040], [0.120, 0.086], FRAME);            /* seat tube  */
-  sweep(b, pathYZ([[1.452, -0.430], [1.505, -0.15], [1.572, 0.20], [1.648, 0.570]], NS),
-        S_OVAL, [0.044, 0.046], [0.086, 0.072], FRAME);            /* top tube   */
-  sweep(b, pathYZ([[1.370, 0.706], [1.525, 0.660], [1.680, 0.614]], NS),
-        S_AERO, [0.054, 0.050], [0.130, 0.108], FRAME);            /* head tube  */
-  sweep(b, pathYZ([[1.372, 0.704], [1.322, 0.719], [1.272, 0.734]], 4),
-        S_AERO, 0.062, 0.128, FRAME);                              /* fork crown */
+  /* frame. The dropped seat stay, meeting the seat tube well below the
+     top tube, is the single most recognisable Tarmac cue. */
+  bar(b, 0.42,  0.02, 1.04,  0.84, 0.046, 0.115, FRAME);   /* down tube, deep aero */
+  bar(b, 0.42,  0.00, 1.24, -0.30, 0.044, 0.090, FRAME);   /* seat tube            */
+  bar(b, 1.26, -0.28, 1.33,  0.74, 0.042, 0.072, FRAME);   /* top tube             */
+  bar(b, 1.02,  0.86, 1.36,  0.74, 0.048, 0.105, FRAME);   /* head tube            */
+  bar(b, 0.44, -0.04, 0.64, -1.00, 0.034, 0.055, FRAME,  0.048);
+  bar(b, 0.44, -0.04, 0.64, -1.00, 0.034, 0.055, FRAME, -0.048);
+  bar(b, 0.96, -0.24, 0.64, -1.00, 0.028, 0.044, FRAME,  0.042);  /* dropped stay */
+  bar(b, 0.96, -0.24, 0.64, -1.00, 0.028, 0.044, FRAME, -0.042);
+  bar(b, 1.00,  0.88, 0.64,  1.00, 0.032, 0.070, FRAME,  0.046);  /* fork blades  */
+  bar(b, 1.00,  0.88, 0.64,  1.00, 0.032, 0.070, FRAME, -0.046);
+  b.box(0.115, 0.075, 0.105, 0, 1.030, 0.870, FRAME);             /* fork crown   */
+  b.box(0.070, 0.055, 0.060, 0.042, 0.665, -0.985, 0x2c313a);     /* dropouts     */
+  b.box(0.070, 0.055, 0.060, 0.042, 0.665,  0.985, 0x2c313a);
 
-  /* chainstays sweep out around the tyre and back in to the dropout */
-  var csPath = pathYZ([[0.512, -0.208], [0.556, -0.46], [0.600, -0.73], [0.656, -0.986]], NS);
-  sweep(b, csPath, S_OVAL, [0.044, 0.030], [0.082, 0.052], FRAME, [0.062, 0.048]);
-  sweep(b, csPath, S_OVAL, [0.044, 0.030], [0.082, 0.052], FRAME, [-0.062, -0.048]);
+  /* S-Works Power saddle: short nose, and the centre relief channel every
+     one of them has, cut in as two rails with a gap down the middle */
+  bar(b, 1.20, -0.29, 1.47, -0.34, 0.044, 0.078, FRAME);
+  b.box(0.030, 0.040, 0.075, 0, 1.455, -0.315, 0x2c313a);
+  b.box(0.046, 0.040, 0.320, -0.034, 1.512, -0.350, 0x14171c);
+  b.box(0.046, 0.040, 0.320,  0.034, 1.512, -0.350, 0x14171c);
+  b.box(0.114, 0.038, 0.115, 0, 1.512, -0.470, 0x14171c);
+  b.box(0.050, 0.032, 0.150, 0, 1.510, -0.160, 0x14171c);
 
-  /* the dropped seatstay: it meets the seat tube a hand's width below
-     the top tube, and it is the single most recognisable Tarmac cue */
-  var ssPath = pathYZ([[1.266, -0.398], [1.08, -0.60], [0.86, -0.81], [0.658, -0.986]], NS);
-  sweep(b, ssPath, S_OVAL, [0.028, 0.022], [0.056, 0.042], FRAME, [0.032, 0.048]);
-  sweep(b, ssPath, S_OVAL, [0.028, 0.022], [0.056, 0.042], FRAME, [-0.032, -0.048]);
+  /* one-piece Roval Rapide cockpit: flat aero top, no visible stem clamp,
+     bar tape only where the hands go */
+  b.box(0.44, 0.030, 0.150, 0, 1.425, 0.700, FRAME);
+  b.box(0.115, 0.028, 0.190, 0, 1.425, 0.815, FRAME);
+  b.box(0.046, 0.175, 0.046, -0.205, 1.340, 0.760, 0x15181e, [0.42, 0, 0]);
+  b.box(0.046, 0.175, 0.046,  0.205, 1.340, 0.760, 0x15181e, [0.42, 0, 0]);
+  b.box(0.046, 0.046, 0.165, -0.205, 1.262, 0.690, 0x15181e, [-0.30, 0, 0]);
+  b.box(0.046, 0.046, 0.165,  0.205, 1.262, 0.690, 0x15181e, [-0.30, 0, 0]);
+  b.box(0.052, 0.090, 0.052, -0.205, 1.400, 0.625, 0x0e1014);     /* hoods       */
+  b.box(0.052, 0.090, 0.052,  0.205, 1.400, 0.625, 0x0e1014);
+  b.box(0.030, 0.105, 0.030, -0.213, 1.330, 0.606, 0x2f3540, [-0.16, 0, 0]);
+  b.box(0.030, 0.105, 0.030,  0.213, 1.330, 0.606, 0x2f3540, [-0.16, 0, 0]);
+  b.box(0.022, 0.024, 0.230, -0.196, 1.408, 0.700, 0x2a303a);     /* brake hoses */
+  b.box(0.022, 0.024, 0.230,  0.196, 1.408, 0.700, 0x2a303a);
 
-  /* fork blades rake 44mm forward of the steering axis */
-  var fkPath = pathYZ([[1.264, 0.742], [1.08, 0.816], [0.86, 0.906], [0.660, 0.986]], NS);
-  sweep(b, fkPath, S_AERO, [0.036, 0.028], [0.092, 0.058], FRAME, [0.046, 0.052]);
-  sweep(b, fkPath, S_AERO, [0.036, 0.028], [0.092, 0.058], FRAME, [-0.046, -0.052]);
-
-  b.box(0.072, 0.062, 0.054,  0.048, 0.658, -0.988, 0x2c313a);     /* dropouts */
-  b.box(0.072, 0.062, 0.054, -0.048, 0.658, -0.988, 0x2c313a);
-  b.box(0.066, 0.070, 0.050,  0.052, 0.660,  0.988, 0x2c313a);
-  b.box(0.066, 0.070, 0.050, -0.052, 0.660,  0.988, 0x2c313a);
-  b.cyl(0.056, 0.056, 0.148, 14, 0, 0.522, -0.184, 0x2c313a, [0, 0, Math.PI/2]);
-
-  /* aero D-post and the S-Works Power saddle: short, and with the centre
-     relief channel every one of them has */
-  sweep(b, pathYZ([[1.462, -0.464], [1.68, -0.530], [1.888, -0.593]], 6),
-        S_AERO, 0.042, 0.082, FRAME);
-  b.box(0.046, 0.044, 0.062, 0, 1.905, -0.600, 0x2c313a);
-  sweep(b, pathYZ([[1.944, -0.836], [1.950, -0.700], [1.946, -0.560], [1.938, -0.404]], 9),
-        S_OVAL, [0.300, 0.095], [0.044, 0.034], 0x14171c);
-  b.box(0.058, 0.026, 0.220, 0, 1.958, -0.662, 0x0b0d10);
-  b.box(0.150, 0.016, 0.050, 0, 1.922, -0.836, 0x2a2f38);
-
-  /* one-piece Roval Rapide cockpit. The drops are swept curves in the
-     plane of each side, which is the only way a bar reads as a bar. */
-  b.box(0.430, 0.026, 0.120, 0, 1.745, 0.596, FRAME);
-  b.box(0.104, 0.030, 0.190, 0, 1.742, 0.690, FRAME);
-  b.box(0.128, 0.034, 0.062, 0, 1.726, 0.590, FRAME);
-  var drop = pathYZ([[1.744, 0.616], [1.735, 0.760], [1.672, 0.830],
-                     [1.576, 0.806], [1.520, 0.718], [1.514, 0.620]], 9 * QUAL);
-  sweep(b, drop, S_ROUND, 0.030, 0.030, 0x15181e,  0.212);
-  sweep(b, drop, S_ROUND, 0.030, 0.030, 0x15181e, -0.212);
-  b.box(0.050, 0.100, 0.058,  0.212, 1.716, 0.800, 0x0e1014);      /* hoods */
-  b.box(0.050, 0.100, 0.058, -0.212, 1.716, 0.800, 0x0e1014);
-  b.box(0.028, 0.110, 0.028,  0.220, 1.640, 0.784, 0x2f3540, [-0.20, 0, 0]);
-  b.box(0.028, 0.110, 0.028, -0.220, 1.640, 0.784, 0x2f3540, [-0.20, 0, 0]);
-  b.box(0.020, 0.022, 0.210,  0.202, 1.730, 0.700, 0x2a303a);      /* hoses */
-  b.box(0.020, 0.022, 0.210, -0.202, 1.730, 0.700, 0x2a303a);
-
-  /* head unit on an out-front mount, because every one of these bikes
-     has one and it is the fastest read in the whole model */
-  b.box(0.054, 0.024, 0.110, 0, 1.760, 0.760, 0x2f3540);
-  b.box(0.108, 0.030, 0.142, 0, 1.780, 0.818, 0x16191f);
-  var hud = screenMesh(texHeadUnit(), 0.090, 0.118, 0, 1.796, 0.818, -Math.PI/2, 0, 0, 0.004);
+  /* head unit on an out-front mount, screen up, because every one of
+     these bikes has one and it is the fastest read in the whole model */
+  b.box(0.060, 0.026, 0.120, 0, 1.452, 0.905, 0x2f3540);
+  b.box(0.115, 0.032, 0.150, 0, 1.474, 0.965, 0x16191f);
+  var hud = screenMesh(texHeadUnit(), 0.095, 0.125, 0, 1.490, 0.965, -Math.PI/2, 0, 0, 0.004);
   hud.applyMatrix4(baseM);
   x.push(hud);
 
   /* drivetrain, all on the camera-facing side so it reads */
-  b.cyl(0.212, 0.212, 0.008, 20, 0.066, 0.522, -0.184, 0x707886, [0, 0, Math.PI/2]);
-  b.cyl(0.158, 0.158, 0.008, 18, 0.052, 0.522, -0.184, 0x5d6573, [0, 0, Math.PI/2]);
-  b.cyl(0.074, 0.074, 0.028, 12, 0.058, 0.522, -0.184, 0x2a303a, [0, 0, Math.PI/2]);
-  for (var cr = 0; cr < 5; cr++){
+  b.cyl(0.205, 0.205, 0.013, 14, 0.062, 0.42, 0.02, ALLOY, [0, 0, Math.PI/2]);
+  b.cyl(0.150, 0.150, 0.013, 12, 0.070, 0.42, 0.02, 0x3d434f, [0, 0, Math.PI/2]);
+  b.cyl(0.072, 0.072, 0.028, 10, 0.058, 0.42, 0.02, 0x22262e, [0, 0, Math.PI/2]);
+  for (var cr = 0; cr < 5; cr++){                    /* power meter spider */
     var ca = cr * (Math.PI * 2 / 5) + 0.3;
-    b.box(0.016, 0.118, 0.034, 0.048,
-          0.522 + Math.sin(ca) * 0.060, -0.184 + Math.cos(ca) * 0.060, 0x2f3540, [ca, 0, 0]);
+    b.box(0.018, 0.115, 0.038, 0.050, 0.42 + Math.sin(ca)*0.058, 0.02 + Math.cos(ca)*0.058,
+          0x2f3540, [ca, 0, 0]);
   }
-  b.box(0.024, 0.348, 0.034,  0.080, 0.685, -0.184, ALLOY, [-0.40, 0, 0]);
-  b.box(0.024, 0.348, 0.034, -0.080, 0.359, -0.184, ALLOY, [-0.40, 0, 0]);
-  b.box(0.096, 0.020, 0.150,  0.112, 0.848, -0.060, 0x14171c);
-  b.box(0.096, 0.020, 0.150, -0.112, 0.196, -0.308, 0x14171c);
-  sweep(b, pathYZ([[0.742, -0.184], [0.755, -0.60], [0.786, -0.986]], 6),
-        S_ROUND, 0.014, 0.020, 0x4a515e, 0.084);                   /* chain */
-  sweep(b, pathYZ([[0.302, -0.184], [0.380, -0.62], [0.520, -0.930]], 6),
-        S_ROUND, 0.014, 0.020, 0x4a515e, 0.084);
+  b.box(0.026, 0.33, 0.038, 0.082, 0.575, 0.02, ALLOY, [-0.42, 0, 0]);
+  b.box(0.026, 0.33, 0.038, -0.082, 0.265, 0.02, ALLOY, [-0.42, 0, 0]);
+  b.box(0.100, 0.020, 0.155, 0.115, 0.735, 0.145, 0x14171c);
+  b.box(0.100, 0.020, 0.155, -0.115, 0.105, -0.105, 0x14171c);
+  bar(b, 0.625, 0.02, 0.765, -1.00, 0.014, 0.020, 0x4a515e, 0.086);
+  bar(b, 0.245, 0.02, 0.475, -0.92, 0.014, 0.020, 0x4a515e, 0.086);
 
-  /* rear mech: body, cage, two jockey wheels, AXS battery */
-  b.box(0.034, 0.180, 0.074, 0.084, 0.490, -0.944, 0x2f3540, [0.30, 0, 0]);
-  b.box(0.028, 0.102, 0.052, 0.086, 0.372, -0.904, 0x363c47, [-0.22, 0, 0]);
-  b.cyl(0.048, 0.048, 0.011, 12, 0.090, 0.418, -0.876, 0x4a515e, [0, 0, Math.PI/2]);
-  b.cyl(0.048, 0.048, 0.011, 12, 0.090, 0.282, -0.834, 0x4a515e, [0, 0, Math.PI/2]);
-  b.box(0.013, 0.146, 0.028, 0.098, 0.350, -0.855, 0x22262e, [-0.28, 0, 0]);
-  b.box(0.042, 0.068, 0.042, 0.076, 0.440, -0.966, 0x14171c);
-  b.box(0.028, 0.100, 0.046, 0.068, 0.800, -0.256, 0x363c47, [-0.30, 0, 0]);
+  /* rear mech: parallelogram body, cage, two jockey wheels, AXS battery */
+  b.box(0.036, 0.185, 0.078, 0.086, 0.470, -0.945, 0x2f3540, [0.30, 0, 0]);
+  b.box(0.030, 0.105, 0.055, 0.088, 0.352, -0.905, 0x373d49, [-0.22, 0, 0]);
+  b.cyl(0.050, 0.050, 0.012, 8, 0.092, 0.398, -0.878, 0x4a515e, [0, 0, Math.PI/2]);
+  b.cyl(0.050, 0.050, 0.012, 8, 0.092, 0.262, -0.836, 0x4a515e, [0, 0, Math.PI/2]);
+  b.box(0.014, 0.150, 0.030, 0.100, 0.330, -0.857, 0x22262e, [-0.28, 0, 0]);
+  b.box(0.044, 0.070, 0.044, 0.078, 0.420, -0.968, 0x14171c);
+
+  /* front mech on the seat tube */
+  b.box(0.030, 0.105, 0.048, 0.070, 0.660, -0.098, 0x373d49, [-0.14, 0, 0]);
+  b.box(0.020, 0.060, 0.070, 0.082, 0.612, -0.062, 0x2f3540);
+
+  /* two bottle cages, which is how it leaves the house */
+  b.box(0.030, 0.240, 0.026, 0.060, 0.830, -0.152, 0x5a6270, [-0.351, 0, 0]);
+  b.cyl(0.058, 0.070, 0.310, 8, 0.098, 0.830, -0.150, 0x8e97a6, [-0.351, 0, 0]);
+  b.cyl(0.030, 0.030, 0.050, 6, 0.098, 0.988, -0.207, 0x3d434f, [-0.351, 0, 0]);
+  b.box(0.028, 0.210, 0.024, 0.058, 0.760, -0.010, 0x5a6270, [0.06, 0, 0]);
+  b.cyl(0.054, 0.064, 0.280, 8, 0.092, 0.770, -0.005, 0x2f6fae, [0.06, 0, 0]);
+  b.cyl(0.028, 0.028, 0.046, 6, 0.092, 0.912, -0.014, 0x3d434f, [0.06, 0, 0]);
 
   /* the wordmarks: what turns "a road bike" into "an S-Works SL9" */
   var rig = new THREE.Object3D();
   rig.applyMatrix4(baseM);
-  rig.add(decal(texWord('SPECIALIZED', 384, 48, '#cfd6e0', 30, false, 2),
-                0.76, 0.092, 0.034, 0.945, 0.258, 0, Math.PI/2, -0.768));
-  rig.add(decal(texWord('SL9', 128, 48, '#aab4c4', 28, true, 0),
-                0.22, 0.072, 0.028, 1.494, -0.200, 0, Math.PI/2, -0.187));
-  rig.add(decal(texSLogo(), 0.070, 0.088, 0.031, 1.540, 0.652, 0, Math.PI/2, 0.28));
+  rig.add(decal(texWord('S-WORKS', 256, 48, '#e8ecf4', 30, false, 2.5),
+                0.62, 0.115, 0.050, 0.73, 0.43, 0, Math.PI/2, -0.758));
+  rig.add(decal(texWord('SL9', 128, 48, '#aab4c4', 26, true, 0),
+                0.24, 0.090, 0.046, 1.295, 0.180, 0, Math.PI/2, -0.064));
+  rig.add(decal(texSLogo(), 0.085, 0.105, 0.051, 1.205, 0.800, 0, Math.PI/2, 0.30));
+  rig.add(decal(texWord('SPECIALIZED', 256, 32, '#7f8898', 17, false, 2),
+                0.30, 0.045, 0.024, 1.445, 0.700, -Math.PI/2, 0, 0));
   rig.add(decal(texWord('TARMAC SL9', 256, 32, '#94a0b2', 19, false, 1.5),
-                0.34, 0.042, 0.020, 1.492, -0.260, -Math.PI/2, 0, 0));
-  rig.add(decal(texWord('ROVAL', 160, 32, '#e6ebf2', 20, false, 2),
-                0.34, 0.056, 0.036, 0.148, -1.000, 0, Math.PI/2, 0));
-  rig.add(decal(texWord('ROVAL', 160, 32, '#e6ebf2', 20, false, 2),
-                0.34, 0.056, 0.036, 0.148,  1.000, 0, Math.PI/2, 0));
+                0.36, 0.045, 0.023, 1.300, 0.235, -Math.PI/2, 0, -0.064));
+  rig.add(decal(texWord('ROVAL', 128, 32, '#7d8796', 18, false, 2),
+                0.30, 0.052, 0.008, 0.130, -1.000, 0, Math.PI/2, 0));
+  rig.add(decal(texWord('ROVAL', 128, 32, '#7d8796', 18, false, 2),
+                0.30, 0.052, 0.008, 0.130,  1.000, 0, Math.PI/2, 0));
   x.push(rig);
   b.setBase(null);
 
@@ -2391,6 +2203,8 @@ spot('sports', 'Cycling', [66, 82, 6.20], function(b, x){
   b.box(0.130, 0.026, 0.054, -4.206, 1.908, hz, 0xb9c2d2, [0, 0, 0.10]);
   b.box(0.128, 0.024, 0.062, -4.208, 1.902, hz - 0.082, 0x0d0f13, [0, 0, 0.10]);
   b.box(0.128, 0.024, 0.062, -4.208, 1.902, hz + 0.082, 0x0d0f13, [0, 0, 0.10]);
+  b.box(0.150, 0.075, 0.026, -4.238, 1.790, hz - 0.118, 0x0d0f13);
+  b.box(0.150, 0.075, 0.026, -4.238, 1.790, hz + 0.118, 0x0d0f13);
   x.push(decal(texSLogo(), 0.060, 0.072, -4.116, 1.836, hz, 0, Math.PI/2, 0));
 
   /* S-Works Torch road shoes, one upright, one tipped onto its cleat */
@@ -2400,14 +2214,14 @@ spot('sports', 'Cycling', [66, 82, 6.20], function(b, x){
   /* the track pump lives against the wall like it does in every flat */
   b.box(0.300, 0.035, 0.330, -4.290, 0.020, 0.78, 0x22262e);
   b.box(0.090, 0.030, 0.090, -4.290, 0.050, 0.78, 0x2f3540);
-  b.cyl(0.048, 0.048, 1.220, 14, -4.290, 0.660, 0.78, 0x6e7684);
-  b.cyl(0.030, 0.030, 0.130, 10, -4.290, 1.320, 0.78, C.metal);
+  b.cyl(0.048, 0.048, 1.220, 8, -4.290, 0.660, 0.78, 0x6e7684);
+  b.cyl(0.030, 0.030, 0.130, 6, -4.290, 1.320, 0.78, C.metal);
   b.box(0.062, 0.050, 0.360, -4.290, 1.380, 0.78, 0x16191f);
-  b.cyl(0.100, 0.100, 0.034, 16, -4.205, 0.300, 0.78, 0x22262e, [0, 0, Math.PI/2]);
+  b.cyl(0.100, 0.100, 0.034, 10, -4.205, 0.300, 0.78, 0x22262e, [0, 0, Math.PI/2]);
   x.push(screenMesh(texGauge(), 0.150, 0.150, -4.188, 0.300, 0.78, 0, Math.PI/2, 0, 0.004));
   b.box(0.026, 0.026, 0.300, -4.230, 0.210, 0.93, 0x16191f, [0.40, 0, 0]);
   b.box(0.026, 0.240, 0.026, -4.215, 0.330, 1.06, 0x16191f, [0.55, 0, 0]);
-}, 'cycling', { gloss: true, center: [-4.14, 3.30, 2.50] });
+}, 'cycling');
 
 spot('sports', 'Running', [58, 60, 2.75], function(b, x){
   /* A pair of Adizero EVO SLs kicked off under the bike, not squared up.
@@ -2565,7 +2379,7 @@ spot('sports', 'Swimming', [64, 80, 4.10], function(b, x){
   b.box(0.022, 0.022, 0.150, -3.630, 0.078, 2.69, 0x9aa3b2);
 }, 'swimming');
 
-spot('sports', 'Race results', [64, 78, 4.40], function(b, x){
+spot('sports', 'Race results', [68, 80, 4.60], function(b, x){
   /* medals on the rail, race bibs still pinned above the bike */
   var medal = function(mz, drop, face, ribbon){
     b.box(0.016, drop, 0.115, -4.312, 2.000 - drop/2, mz, ribbon);
@@ -2576,14 +2390,14 @@ spot('sports', 'Race results', [64, 78, 4.40], function(b, x){
   medal(GEAR.peg.medal,        0.40, 0xb8b8c0, 0x2e5c70);
   medal(GEAR.peg.medal + 0.17, 0.22, 0xc07a3a, 0x3f6b4a);
 
-  var bib = function(by, bz, tilt, t){
-    b.box(0.014, 0.300, 0.360, -4.400, by, bz, 0xe6e2d6, [tilt, 0, 0]);
-    x.push(screenMesh(t, 0.350, 0.290, -4.393, by, bz, 0, Math.PI/2, tilt, 0.008));
-    b.box(0.020, 0.028, 0.028, -4.386, by + 0.108, bz - 0.130, 0x9aa3b2, [tilt, 0, 0]);
-    b.box(0.020, 0.028, 0.028, -4.386, by + 0.108, bz + 0.130, 0x9aa3b2, [tilt, 0, 0]);
+  var bib = function(bz, tilt, t){
+    b.box(0.016, 0.300, 0.360, -4.442, 3.980, bz, 0xe6e2d6, [tilt, 0, 0]);
+    x.push(screenMesh(t, 0.350, 0.290, -4.434, 3.980, bz, 0, Math.PI/2, tilt, 0.004));
+    b.box(0.022, 0.030, 0.030, -4.426, 4.088, bz - 0.130, 0x9aa3b2, [tilt, 0, 0]);
+    b.box(0.022, 0.030, 0.030, -4.426, 4.088, bz + 0.130, 0x9aa3b2, [tilt, 0, 0]);
   };
-  bib(2.380, -0.880, 0.055, texBib('ALMATY MARATHON', '1042', '21.1 KM', '#8a3a30'));
-  bib(3.280, 0.300, -0.045, texBib('ASTANA HALF', '388', '21.1 KM', '#2e5c70'));
+  bib(1.00, 0.055, texBib('ALMATY MARATHON', '1042', '21.1 KM', '#8a3a30'));
+  bib(1.58, -0.045, texBib('ASTANA HALF', '388', '21.1 KM', '#2e5c70'));
 
   x.push(ledMesh(0xffb45c, [[-4.362, 2.086, GEAR.railZ0 + 0.10, 0.026]]));
 }, 'races');
